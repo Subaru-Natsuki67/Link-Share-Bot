@@ -5,16 +5,31 @@ from logging.handlers import RotatingFileHandler
 # ──────────────────────────────────────────────
 #  Logging setup
 # ──────────────────────────────────────────────
+LOG_FILE_NAME = "links-sharingbot.txt"
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format="[%(asctime)s - %(levelname)s] - %(name)s - %(message)s",
+    datefmt="%d-%b-%y %H:%M:%S",
     handlers=[
-        RotatingFileHandler("bot.log", maxBytes=5_000_000, backupCount=3),
+        RotatingFileHandler(
+            LOG_FILE_NAME,
+            maxBytes=50_000_000,
+            backupCount=10,
+        ),
         logging.StreamHandler(),
     ],
 )
-LOGGER = logging.getLogger
+logging.getLogger("pyrogram").setLevel(logging.WARNING)
 
+
+def LOGGER(name: str) -> logging.Logger:
+    return logging.getLogger(name)
+
+
+# ──────────────────────────────────────────────
+#  Internal env helper
+# ──────────────────────────────────────────────
 
 def _env(key: str, default=None, required: bool = False):
     val = os.environ.get(key, default)
@@ -26,8 +41,8 @@ def _env(key: str, default=None, required: bool = False):
 # ──────────────────────────────────────────────
 #  Telegram credentials
 # ──────────────────────────────────────────────
-APP_ID: int = int(_env("APP_ID", required=True))
-API_HASH: str = _env("API_HASH", required=True)
+APP_ID:       int = int(_env("APP_ID", required=True))
+API_HASH:     str = _env("API_HASH", required=True)
 TG_BOT_TOKEN: str = _env("TG_BOT_TOKEN", required=True)
 
 # ──────────────────────────────────────────────
@@ -35,24 +50,46 @@ TG_BOT_TOKEN: str = _env("TG_BOT_TOKEN", required=True)
 # ──────────────────────────────────────────────
 OWNER_ID: int = int(_env("OWNER_ID", required=True))
 
-# Space-separated admin IDs (OWNER_ID is always an admin)
 _raw_admins = _env("ADMINS", default="").split()
 ADMINS: list[int] = list({OWNER_ID, *[int(x) for x in _raw_admins if x.isdigit()]})
 
 # ──────────────────────────────────────────────
 #  MongoDB
 # ──────────────────────────────────────────────
-DB_URL: str = _env("DB_URL", required=True)
+DB_URL:  str = _env("DB_URL", required=True)
 DB_NAME: str = _env("DB_NAME", default="LinkShareBot")
 
 # ──────────────────────────────────────────────
-#  Optional / deployment settings
+#  Deployment / performance
 # ──────────────────────────────────────────────
 TG_BOT_WORKERS: int = int(_env("TG_BOT_WORKERS", default=4))
-PORT: int = int(_env("PORT", default=8080))
+PORT:           int = int(_env("PORT", default=8080))
 
-# Force-subscription channel (set to your channel ID or 0 to disable)
+# ──────────────────────────────────────────────
+#  Force-subscription channel (0 = disabled)
+# ──────────────────────────────────────────────
 FORCE_SUB_CHANNEL: int = int(_env("FORCE_SUB_CHANNEL", default=0))
 
-# How many seconds a generated invite link stays alive (default 5 min)
+# ──────────────────────────────────────────────
+#  Invite link expiry (seconds, default 5 min)
+# ──────────────────────────────────────────────
 LINK_EXPIRY_SECONDS: int = int(_env("LINK_EXPIRY_SECONDS", default=300))
+
+# ──────────────────────────────────────────────
+#  Start picture(s)
+#  Set START_PIC_IDS to one or more Telegram file_ids separated by spaces.
+#  One is picked at random on every /start.  Leave empty = text-only start.
+#
+#  How to get a file_id:
+#    Forward any photo to your bot, then read the file_id from the logs.
+# ──────────────────────────────────────────────
+_raw_pics = _env("START_PIC_IDS", default="").strip()
+START_PIC_IDS: list[str] = [p for p in _raw_pics.split() if p]
+
+# ──────────────────────────────────────────────
+#  Custom bot texts  (HTML is fully supported)
+#  If a variable is empty the built-in defaults in start.py are used.
+# ──────────────────────────────────────────────
+START_TEXT: str = _env("START_TEXT", default="")
+HELP_TEXT:  str = _env("HELP_TEXT",  default="")
+ABOUT_TEXT: str = _env("ABOUT_TEXT", default="")
