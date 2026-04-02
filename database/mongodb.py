@@ -2,13 +2,6 @@
 database/mongodb.py
 ~~~~~~~~~~~~~~~~~~~
 Async MongoDB wrapper — every public method is awaitable.
-
-Usage:
-    from database import CosmicBotz
-
-    await CosmicBotz.add_user(user_id)
-    await CosmicBotz.add_channel(channel_id, channel_name)
-    ...
 """
 import time
 from typing import Optional
@@ -25,8 +18,8 @@ class _Database:
 
     def __init__(self):
         self._client: Optional[AsyncIOMotorClient] = None
-        self._db = None
-        self._users = None
+        self._db       = None
+        self._users    = None
         self._channels = None
 
     # ────────────────────────────────────────────
@@ -35,9 +28,9 @@ class _Database:
 
     def connect(self):
         """Call once at bot startup to initialise the Motor client."""
-        self._client = AsyncIOMotorClient(DB_URL)
-        self._db = self._client[DB_NAME]
-        self._users = self._db["users"]
+        self._client   = AsyncIOMotorClient(DB_URL)
+        self._db       = self._client[DB_NAME]
+        self._users    = self._db["users"]
         self._channels = self._db["channels"]
         logger.info("Connected to MongoDB database '%s'.", DB_NAME)
 
@@ -46,12 +39,8 @@ class _Database:
     # ────────────────────────────────────────────
 
     async def add_user(self, user_id: int) -> bool:
-        """
-        Add a user to the DB if not already present.
-        Returns True if newly added, False if already existed.
-        """
-        existing = await self._users.find_one({"_id": user_id})
-        if existing:
+        """Add a user if not already present. Returns True if newly added."""
+        if await self._users.find_one({"_id": user_id}):
             return False
         await self._users.insert_one({"_id": user_id, "joined": int(time.time())})
         return True
@@ -63,7 +52,6 @@ class _Database:
         return await self._users.count_documents({})
 
     async def get_all_users(self) -> list[int]:
-        """Return list of all user IDs."""
         cursor = self._users.find({}, {"_id": 1})
         return [doc["_id"] async for doc in cursor]
 
@@ -76,22 +64,16 @@ class _Database:
     # ────────────────────────────────────────────
 
     async def add_channel(self, channel_id: int, channel_name: str = "") -> bool:
-        """
-        Register a channel the bot manages.
-        Returns True if newly added, False if already existed.
-        """
-        existing = await self._channels.find_one({"_id": channel_id})
-        if existing:
+        """Register a channel. Returns True if newly added."""
+        if await self._channels.find_one({"_id": channel_id}):
             return False
-        await self._channels.insert_one(
-            {
-                "_id": channel_id,
-                "name": channel_name,
-                "added": int(time.time()),
-                "req_mode": False,      # auto-approve join requests
-                "req_timer": 0,         # seconds (0 = no timer)
-            }
-        )
+        await self._channels.insert_one({
+            "_id":       channel_id,
+            "name":      channel_name,
+            "added":     int(time.time()),
+            "req_mode":  False,
+            "req_timer": 0,
+        })
         return True
 
     async def remove_channel(self, channel_id: int) -> bool:
@@ -105,7 +87,6 @@ class _Database:
         return await self._channels.find_one({"_id": channel_id})
 
     async def get_all_channels(self) -> list[dict]:
-        """Return list of channel documents: {_id, name, added, req_mode, req_timer}."""
         cursor = self._channels.find({})
         return [doc async for doc in cursor]
 
@@ -118,7 +99,6 @@ class _Database:
         )
 
     async def set_req_mode(self, channel_id: int, enabled: bool):
-        """Enable / disable auto-approve join-request mode for a channel."""
         await self._channels.update_one(
             {"_id": channel_id}, {"$set": {"req_mode": enabled}}
         )
@@ -128,7 +108,6 @@ class _Database:
         return doc.get("req_mode", False) if doc else False
 
     async def set_req_timer(self, channel_id: int, seconds: int):
-        """Set auto-approve timer in seconds (0 = no timer)."""
         await self._channels.update_one(
             {"_id": channel_id}, {"$set": {"req_timer": seconds}}
         )
@@ -138,12 +117,12 @@ class _Database:
         return doc.get("req_timer", 0) if doc else 0
 
     # ────────────────────────────────────────────
-    #  Stats helper
+    #  Stats
     # ────────────────────────────────────────────
 
     async def stats(self) -> dict:
         return {
-            "users": await self.total_users(),
+            "users":    await self.total_users(),
             "channels": await self.total_channels(),
         }
 
