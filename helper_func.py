@@ -3,33 +3,34 @@ helper_func.py
 ~~~~~~~~~~~~~~
 Shared utilities:
   - Base64 encode / decode for obfuscating channel IDs in deep-links
+  - Two deep-link flavours:
+      Normal  →  ?start=<b64(channel_id)>        → bot generates temp invite
+      Request →  ?start=req_<b64(channel_id)>    → bot forwards to request-join link
   - Invite-link generation (temporary, auto-revoke)
+  - Request-join link generation (permanent, approval required)
   - Force-subscription check
   - Pagination helpers
 """
 import asyncio
 import base64
 import math
-import string
-import time
+from datetime import datetime, timedelta, timezone
 from typing import Union
 
 from pyrogram import Client
-from pyrogram.errors import (
-    ChatAdminRequired,
-    FloodWait,
-    UserAlreadyParticipant,
-    UserNotParticipant,
-)
-from pyrogram.types import ChatInviteLink, InlineKeyboardButton, InlineKeyboardMarkup
+from pyrogram.errors import ChatAdminRequired, FloodWait, UserNotParticipant
+from pyrogram.types import ChatInviteLink, InlineKeyboardButton
 
 from config import FORCE_SUB_CHANNEL, LINK_EXPIRY_SECONDS, LOGGER
 
 logger = LOGGER(__name__)
 
+# ── Token prefix for request-join deep-links ─────────────────────────────────
+REQ_PREFIX = "req_"
+
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Encode / Decode  (URL-safe base64, no padding)
+#  Low-level base64 helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def encode(string: str) -> str:
@@ -42,31 +43,82 @@ async def decode(base64_string: str) -> str:
     """Decode a URL-safe base64 string (padding is added automatically)."""
     base64_string = base64_string.strip("=")
     padded = base64_string + "=" * (-len(base64_string) % 4)
-    string_bytes = base64.urlsafe_b64decode(padded.encode("ascii"))
-    return string_bytes.decode("ascii")
+    return base64.urlsafe_b64decode(padded.encode("ascii")).decode("ascii")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Channel ID helpers
+#  Channel ID → deep-link token helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def encode_channel_id(channel_id: int) -> str:
-    """Turn a channel_id (int) into an encoded deep-link token."""
-    return await encode(f"channel_{channel_id}")
-
-
-async def decode_channel_token(token: str) -> Union[int, None]:
     """
-    Decode a deep-link token back to a channel_id int.
-    Returns None if token is invalid / not a channel token.
+    Encode channel_id for a *normal* deep-link.
+    Token = base64url( str(channel_id) )
+    e.g. -1002492815676  →  "LTEwMDI0OTI4MTU2NzY"
+    """
+    return await encode(str(channel_id))
+
+
+async def encode_req_channel_id(channel_id: int) -> str:
+    """
+    Encode channel_id for a *request-join* deep-link.
+    Token = "req_" + base64url( str(channel_id) )
+    e.g. -1002492815676  →  "req_LTEwMDI0OTI4MTU2NzY"
+    """
+    b64 = await encode(str(channel_id))
+    return f"{REQ_PREFIX}{b64}"
+
+
+async def decode_channel_token(token: str) -> tuple[Union[int, None], bool]:
+    """
+    Decode any deep-link token back to (channel_id, is_request_link).
+
+    Handles:
+      • req_<b64>  → request-join flow  (is_request_link = True)
+      • <b64>      → normal invite flow  (is_request_link = False)
+      • Legacy old-format tokens (bare base64 of channel_id int string)
+
+    Returns (None, False) if the token cannot be decoded.
     """
     try:
-        raw = await decode(token)
+        is_req = token.startswith(REQ_PREFIX)
+        raw_b64 = token[len(REQ_PREFIX):] if is_req else token
+
+        raw = await decode(raw_b64)
+
+        # ── New format: base64(channel_id_string) e.g. "-1001234567890" ──────
+        stripped = raw.strip()
+        if stripped.lstrip("-").isdigit():
+            return int(stripped), is_req
+
+        # ── Even older "channel_<id>" format from some forks ─────────────────
         if raw.startswith("channel_"):
-            return int(raw.split("channel_")[1])
+            return int(raw.split("channel_", 1)[1]), is_req
+
     except Exception:
         pass
-    return None
+    return None, False
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Build both deep-link URLs (bot username fetched live — never from DB)
+# ──────────────────────────────────────────────────────────────────────────────
+
+async def build_links(client: Client, channel_id: int) -> tuple[str, str]:
+    """
+    Return (normal_deep_link, request_deep_link) for channel_id.
+    Bot username is fetched from Telegram at call time so renaming the bot
+    never breaks anything — nothing is persisted in the database.
+    """
+    me = await client.get_me()
+    bot_username = me.username
+
+    normal_token = await encode_channel_id(channel_id)
+    req_token    = await encode_req_channel_id(channel_id)
+
+    normal_link = f"https://t.me/{bot_username}?start={normal_token}"
+    req_link    = f"https://t.me/{bot_username}?start={req_token}"
+    return normal_link, req_link
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -77,10 +129,10 @@ async def get_invite_link(client: Client, channel_id: int) -> Union[str, None]:
     """
     Create a fresh temporary invite link for *channel_id*.
     - Expires in LINK_EXPIRY_SECONDS (default 5 min)
-    - Creates one use only (member_limit=1) so the link auto-revokes
+    - Single-use (member_limit=1) so it auto-revokes after one join.
     Returns the invite URL string, or None on failure.
     """
-    expire_at = int(time.time()) + LINK_EXPIRY_SECONDS
+    expire_at = datetime.now(timezone.utc) + timedelta(seconds=LINK_EXPIRY_SECONDS)
     try:
         link: ChatInviteLink = await client.create_chat_invite_link(
             chat_id=channel_id,
@@ -134,7 +186,7 @@ async def is_subscribed(client: Client, user_id: int) -> bool:
     except UserNotParticipant:
         return False
     except Exception:
-        return True  # fail-open so bot doesn't become unusable
+        return True  # fail-open so the bot doesn't become unusable
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -142,14 +194,14 @@ async def is_subscribed(client: Client, user_id: int) -> bool:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def paginate_keyboard(
-    items: list[tuple[str, str]],  # [(label, callback_data), ...]
+    items: list[tuple[str, str]],   # [(label, callback_data), ...]
     page: int,
     per_page: int = 5,
     prefix: str = "page",
 ) -> tuple[list, int, int]:
     """
     Returns (keyboard_rows, current_page, total_pages).
-    Adds ← / → navigation buttons when needed.
+    Adds ◀ / ▶ navigation buttons when needed.
     """
     total = len(items)
     total_pages = max(1, math.ceil(total / per_page))
