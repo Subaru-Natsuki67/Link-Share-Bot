@@ -41,6 +41,7 @@ class Bot(Client):
             plugins={"root": "plugins"},
             workers=TG_BOT_WORKERS,
             bot_token=TG_BOT_TOKEN,
+            parse_mode=ParseMode.HTML,
         )
 
     # ------------------------------------------------------------------
@@ -56,7 +57,7 @@ class Bot(Client):
         me = await self.get_me()
         self.uptime = datetime.now()
         self.username = me.username
-        await self.set_parse_mode(ParseMode.HTML)
+        
 
         logger.info("Bot @%s is running! [workers=%s]", me.username, TG_BOT_WORKERS)
 
