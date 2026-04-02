@@ -7,16 +7,21 @@ Owner / admin management commands:
   /status     — Bot uptime & basic info (admins)
   /broadcast  — Send a message to all users (admins)
   /cleanup    — Remove users who blocked the bot (admins)
-  /users      — List total user count (admins)
+  /users      — Total user count (admins)
+  /logs       — Send the current log file (owner only)
+
+Start pic, help text, about text and start text are all configured via
+environment variables in config.py — not via bot commands.
 """
 import asyncio
+import os
 from datetime import datetime
 
 from pyrogram import Client, filters
 from pyrogram.errors import FloodWait, InputUserDeactivated, UserIsBlocked
 from pyrogram.types import Message
 
-from config import ADMINS, LOGGER, OWNER_ID
+from config import ADMINS, LOG_FILE_NAME, LOGGER, OWNER_ID
 from database import CosmicBotz
 
 logger = LOGGER(__name__)
@@ -33,7 +38,6 @@ owner_filter = filters.user([OWNER_ID])
 async def stats_handler(client: Client, message: Message):
     data = await CosmicBotz.stats()
     uptime_str = _format_uptime(client.uptime)
-
     await message.reply_text(
         "📊 <b>Bot Statistics</b>\n\n"
         f"👤 <b>Total Users:</b> {data['users']}\n"
@@ -51,7 +55,6 @@ async def status_handler(client: Client, message: Message):
     me = await client.get_me()
     uptime_str = _format_uptime(client.uptime)
     data = await CosmicBotz.stats()
-
     await message.reply_text(
         f"🤖 <b>@{me.username}</b> is <b>online</b>!\n\n"
         f"⏱️ <b>Uptime:</b> {uptime_str}\n"
@@ -71,7 +74,39 @@ async def users_handler(client: Client, message: Message):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  /broadcast  (admins) — reply to a message to broadcast it
+#  /logs  — upload the live log file to owner (owner only)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@Client.on_message(filters.command("logs") & filters.private & owner_filter)
+async def logs_handler(client: Client, message: Message):
+    if not os.path.exists(LOG_FILE_NAME):
+        await message.reply_text("📭 No log file found yet.")
+        return
+
+    size = os.path.getsize(LOG_FILE_NAME)
+    if size == 0:
+        await message.reply_text("📭 Log file is empty.")
+        return
+
+    wait = await message.reply_text("📤 Uploading log file…")
+    try:
+        await client.send_document(
+            chat_id=message.chat.id,
+            document=LOG_FILE_NAME,
+            caption=(
+                f"📋 <b>Bot Logs</b>\n"
+                f"📁 <code>{LOG_FILE_NAME}</code>\n"
+                f"📦 Size: <code>{size / 1024:.1f} KB</code>\n"
+                f"🕐 <code>{datetime.now().strftime('%d-%b-%y %H:%M:%S')}</code>"
+            ),
+        )
+        await wait.delete()
+    except Exception as e:
+        await wait.edit_text(f"❌ Failed to send log file:\n<code>{e}</code>")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  /broadcast  (admins)
 # ──────────────────────────────────────────────────────────────────────────────
 
 @Client.on_message(filters.command("broadcast") & filters.private & admin_filter)
@@ -88,8 +123,7 @@ async def broadcast_handler(client: Client, message: Message):
     total = len(user_ids)
 
     status_msg = await message.reply_text(
-        f"📡 <b>Broadcasting to {total} users…</b>\n"
-        "This may take a while."
+        f"📡 <b>Broadcasting to {total} users…</b>\nThis may take a while."
     )
 
     sent = blocked = failed = 0
@@ -111,7 +145,6 @@ async def broadcast_handler(client: Client, message: Message):
         except Exception:
             failed += 1
 
-        # Live progress every 50 users
         if (sent + blocked + failed) % 50 == 0:
             try:
                 await status_msg.edit_text(
@@ -132,7 +165,7 @@ async def broadcast_handler(client: Client, message: Message):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  /cleanup  — remove blocked/inactive users (admins)
+#  /cleanup  (admins)
 # ──────────────────────────────────────────────────────────────────────────────
 
 @Client.on_message(filters.command("cleanup") & filters.private & admin_filter)
@@ -141,7 +174,6 @@ async def cleanup_handler(client: Client, message: Message):
     status_msg = await message.reply_text(
         f"🧹 <b>Checking {len(user_ids)} users for blocks / deactivations…</b>"
     )
-
     removed = 0
     for uid in user_ids:
         try:
@@ -160,15 +192,15 @@ async def cleanup_handler(client: Client, message: Message):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Helper
+#  Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _format_uptime(start: datetime) -> str:
     delta = datetime.now() - start
     h, rem = divmod(int(delta.total_seconds()), 3600)
-    m, s = divmod(rem, 60)
-    d, h = divmod(h, 24)
-    parts = []
+    m, s   = divmod(rem, 60)
+    d, h   = divmod(h, 24)
+    parts  = []
     if d:
         parts.append(f"{d}d")
     if h:
