@@ -17,7 +17,7 @@ so they stay valid even if you rename the bot.
 """
 
 from pyrogram import Client, filters
-from pyrogram.enums import ChatMemberStatus
+from pyrogram.enums import ChatMemberStatus, ChatType
 from pyrogram.types import (
     ChatMemberUpdated,
     InlineKeyboardButton,
@@ -31,34 +31,32 @@ from helper_func import build_links
 logger = LOGGER(__name__)
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-#  my_chat_member update — fires when the bot's status changes in any chat
-# ──────────────────────────────────────────────────────────────────────────────
-
-@Client.on_my_chat_member()
+@Client.on_chat_member_updated()
 async def on_bot_added_to_channel(client: Client, update: ChatMemberUpdated):
     """
-    Triggered every time the bot's membership / admin status changes.
-    We only care about the bot being promoted to admin in a channel.
+    Triggered every time ANY chat member's status changes.
+    We only care when the BOT itself is promoted to admin in a channel.
     """
     new = update.new_chat_member
 
-    # Only act when the bot becomes admin (or creator)
+    # ── 1. Only act when the bot becomes admin/owner ─────────────────────
     if new is None:
         return
+
+    # This update must be about the bot itself
+    me = await client.get_me()
+    if new.user.id != me.id:
+        return
+
+    # Only when status becomes admin or owner
     if new.status not in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER):
         return
 
     chat = update.chat
-    # Only handle channels (not groups/supergroups unless you want that too)
-    if str(chat.type) not in ("ChatType.CHANNEL", "channel"):
-        # PyroFork exposes enums differently depending on version; handle both
-        try:
-            from pyrogram.enums import ChatType
-            if chat.type != ChatType.CHANNEL:
-                return
-        except Exception:
-            pass
+
+    # ── 2. Only handle channels (ignore groups, private chats, etc.) ─────
+    if chat.type != ChatType.CHANNEL:
+        return
 
     channel_id = chat.id
     ch_name = chat.title or str(channel_id)
@@ -77,7 +75,6 @@ async def on_bot_added_to_channel(client: Client, update: ChatMemberUpdated):
         normal_link, req_deep_link = await build_links(client, channel_id)
     except Exception as e:
         logger.error("[Pro] Failed to build links for %s: %s", channel_id, e)
-        # Still notify owner, but without links
         try:
             await client.send_message(
                 OWNER_ID,
