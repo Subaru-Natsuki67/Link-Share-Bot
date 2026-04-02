@@ -3,12 +3,19 @@ plugins/channel_mgmt.py
 ~~~~~~~~~~~~~~~~~~~~~~~~
 Admin commands to manage registered channels:
 
-  /addch  <channel_id>       — Register a channel
+  /addch  <channel_id>       — Register a channel (shows normal + request deep-links)
   /delch  <channel_id>       — Remove a channel
-  /channels                  — Show all channels (paginated buttons)
-  /links                     — List all channels with shareable deep-links
-  /reqlink                   — Show all request-join links (paginated)
-  /bulklink <id1> <id2> ...  — Bulk-generate invite links for multiple IDs
+  /channels                  — Paginated list of channels with info button
+  /links                     — Text list: normal deep-link per channel
+  /reqlink                   — Text list: request deep-link per channel
+  /bulklink <id1> <id2> ...  — Bulk-generate both link types for multiple IDs
+
+Deep-links are always built using the bot's live username (fetched from Telegram).
+Bot username is NEVER stored in the database — renaming the bot keeps all links valid.
+
+Link formats:
+  Normal  : https://t.me/<bot>?start=<b64(channel_id)>
+  Request : https://t.me/<bot>?start=req_<b64(channel_id)>
 """
 import asyncio
 
@@ -23,8 +30,9 @@ from pyrogram.types import (
 from config import ADMINS, LOGGER, OWNER_ID
 from database import CosmicBotz
 from helper_func import (
+    build_links,
     encode_channel_id,
-    get_invite_link,
+    encode_req_channel_id,
     get_request_invite_link,
     paginate_keyboard,
 )
@@ -52,10 +60,12 @@ async def add_channel(client: Client, message: Message):
     try:
         channel_id = int(raw)
     except ValueError:
-        await message.reply_text("❌ Channel ID must be an integer (e.g. <code>-1001234567890</code>).")
+        await message.reply_text(
+            "❌ Channel ID must be an integer (e.g. <code>-1001234567890</code>)."
+        )
         return
 
-    # Try to fetch channel info to validate
+    # Validate: bot must be admin in the channel
     try:
         chat = await client.get_chat(channel_id)
         ch_name = chat.title or str(channel_id)
@@ -69,30 +79,42 @@ async def add_channel(client: Client, message: Message):
 
     added = await CosmicBotz.add_channel(channel_id, ch_name)
     if not added:
-        # Update name in case it changed
         await CosmicBotz.update_channel_name(channel_id, ch_name)
+        # Channel already existed — still show both links
+        normal_link, req_deep_link = await build_links(client, channel_id)
         await message.reply_text(
-            f"ℹ️ Channel <b>{ch_name}</b> is already registered.\n"
-            "Channel name has been refreshed."
+            f"ℹ️ <b>Channel already registered.</b> Name refreshed.\n\n"
+            f"✅ <b>{ch_name}</b>  (<code>{channel_id}</code>)\n\n"
+            f"🔗 Nᴏʀᴍᴀʟ Lɪɴᴋ:\n<code>{normal_link}</code>\n\n"
+            f"📩 Rᴇǫᴜᴇsᴛ Lɪɴᴋ:\n<code>{req_deep_link}</code>",
+            reply_markup=_link_keyboard(normal_link, req_deep_link),
+            disable_web_page_preview=True,
         )
         return
 
-    token = await encode_channel_id(channel_id)
-    bot_info = await client.get_me()
-    deep_link = f"https://t.me/{bot_info.username}?start={token}"
+    # Freshly added — build both deep-links (live username, never from DB)
+    normal_link, req_deep_link = await build_links(client, channel_id)
 
-    keyboard = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("🔗 Share This Link", url=deep_link)]]
-    )
     await message.reply_text(
-        f"✅ <b>Channel added:</b> <i>{ch_name}</i>\n\n"
-        f"🆔 <b>ID:</b> <code>{channel_id}</code>\n\n"
-        f"📎 <b>Shareable deep-link:</b>\n<code>{deep_link}</code>\n\n"
-        "Share this link with users — they'll get a fresh temporary invite each time.",
-        reply_markup=keyboard,
+        f"✅ Cʜᴀᴛ <b>{ch_name}</b> (<code>{channel_id}</code>) ʜᴀs ʙᴇᴇɴ ᴀᴅᴅᴇᴅ sᴜᴄᴄᴇssғᴜʟʟʏ.\n\n"
+        f"🔗 Nᴏʀᴍᴀʟ Lɪɴᴋ:\n<code>{normal_link}</code>\n\n"
+        f"🔗 Rᴇǫᴜᴇsᴛ Lɪɴᴋ:\n<code>{req_deep_link}</code>\n\n"
+        "<i>Share the Normal Link publicly for temp single-use invites.\n"
+        "Use the Request Link when you want to approve members manually.</i>",
+        reply_markup=_link_keyboard(normal_link, req_deep_link),
         disable_web_page_preview=True,
     )
-    logger.info("Channel %s (%s) added by admin %s.", channel_id, ch_name, message.from_user.id)
+    logger.info(
+        "Channel %s (%s) added by admin %s.", channel_id, ch_name, message.from_user.id
+    )
+
+
+def _link_keyboard(normal_link: str, req_link: str) -> InlineKeyboardMarkup:
+    """Inline keyboard with copy buttons for both link types."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔗 Open Normal Link", url=normal_link)],
+        [InlineKeyboardButton("📩 Open Request Link", url=req_link)],
+    ])
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -113,10 +135,14 @@ async def del_channel(client: Client, message: Message):
 
     removed = await CosmicBotz.remove_channel(channel_id)
     if removed:
-        await message.reply_text(f"✅ Channel <code>{channel_id}</code> has been removed.")
+        await message.reply_text(
+            f"✅ Channel <code>{channel_id}</code> has been removed from the database."
+        )
         logger.info("Channel %s removed by admin %s.", channel_id, message.from_user.id)
     else:
-        await message.reply_text(f"❌ Channel <code>{channel_id}</code> was not found in the database.")
+        await message.reply_text(
+            f"❌ Channel <code>{channel_id}</code> was not found in the database."
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -127,34 +153,37 @@ async def del_channel(client: Client, message: Message):
 async def list_channels(client: Client, message: Message):
     channels = await CosmicBotz.get_all_channels()
     if not channels:
-        await message.reply_text("📭 No channels registered yet.\nUse <code>/addch &lt;channel_id&gt;</code> to add one.")
+        await message.reply_text(
+            "📭 No channels registered yet.\n"
+            "Use <code>/addch &lt;channel_id&gt;</code> to add one."
+        )
         return
-
     await _send_channels_page(client, message, channels, page=0)
 
 
 async def _send_channels_page(client, message_or_query, channels, page: int):
-    bot_info = await client.get_me()
-    items = []
-    for ch in channels:
-        ch_id = ch["_id"]
-        name = ch.get("name") or str(ch_id)
-        token = await encode_channel_id(ch_id)
-        deep_link = f"https://t.me/{bot_info.username}?start={token}"
-        items.append((f"📢 {name}", f"chinfo:{ch_id}"))
-
-    rows, cur_page, total_pages = paginate_keyboard(items, page, per_page=5, prefix="chpage")
+    items = [
+        (f"📢 {ch.get('name') or str(ch['_id'])}", f"chinfo:{ch['_id']}")
+        for ch in channels
+    ]
+    rows, cur_page, total_pages = paginate_keyboard(
+        items, page, per_page=5, prefix="chpage"
+    )
 
     text = (
-        f"📋 <b>Registered Channels</b>  [{cur_page+1}/{total_pages}]\n\n"
+        f"📋 <b>Registered Channels</b>  [{cur_page + 1}/{total_pages}]\n\n"
         f"Total: <b>{len(channels)}</b>\n"
-        "Click a channel button to get its invite link."
+        "Tap a channel to view its links."
     )
 
     if isinstance(message_or_query, Message):
-        await message_or_query.reply_text(text, reply_markup=InlineKeyboardMarkup(rows))
+        await message_or_query.reply_text(
+            text, reply_markup=InlineKeyboardMarkup(rows)
+        )
     else:  # CallbackQuery
-        await message_or_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(rows))
+        await message_or_query.edit_message_text(
+            text, reply_markup=InlineKeyboardMarkup(rows)
+        )
 
 
 @Client.on_callback_query(filters.regex(r"^chpage:(\d+)$") & admin_filter)
@@ -171,25 +200,50 @@ async def channels_page_callback(client: Client, cq: CallbackQuery):
 @Client.on_callback_query(filters.regex(r"^chinfo:(-?\d+)$") & admin_filter)
 async def channel_info_callback(client: Client, cq: CallbackQuery):
     channel_id = int(cq.matches[0].group(1))
-    bot_info = await client.get_me()
-    token = await encode_channel_id(channel_id)
-    deep_link = f"https://t.me/{bot_info.username}?start={token}"
 
     ch_doc = await CosmicBotz.get_channel(channel_id)
     name = ch_doc.get("name", str(channel_id)) if ch_doc else str(channel_id)
 
+    # Build links live — bot username never stored
+    normal_link, req_deep_link = await build_links(client, channel_id)
+
+    req_mode = ch_doc.get("req_mode", False) if ch_doc else False
+    req_timer = ch_doc.get("req_timer", 0) if ch_doc else 0
+    req_status = "✅ ON" if req_mode else "❌ OFF"
+    timer_str = f"{req_timer}s" if req_timer else "immediate"
+
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔗 Copy Deep Link", url=deep_link)],
+        [InlineKeyboardButton("🔗 Normal Link", url=normal_link),
+         InlineKeyboardButton("📩 Request Link", url=req_deep_link)],
+        [InlineKeyboardButton(
+            f"Auto-Approve: {req_status}",
+            callback_data=f"toggle_req:{channel_id}"
+        )],
         [InlineKeyboardButton("🗑 Remove Channel", callback_data=f"rmch:{channel_id}")],
         [InlineKeyboardButton("🔙 Back", callback_data="chpage:0")],
     ])
+
     await cq.edit_message_text(
         f"📢 <b>{name}</b>\n"
         f"🆔 <code>{channel_id}</code>\n\n"
-        f"🔗 Deep-link:\n<code>{deep_link}</code>",
+        f"🔗 <b>Normal Link:</b>\n<code>{normal_link}</code>\n\n"
+        f"📩 <b>Request Link:</b>\n<code>{req_deep_link}</code>\n\n"
+        f"🤖 Auto-Approve: <b>{req_status}</b>  |  Timer: <b>{timer_str}</b>",
         reply_markup=keyboard,
         disable_web_page_preview=True,
     )
+
+
+@Client.on_callback_query(filters.regex(r"^toggle_req:(-?\d+)$") & admin_filter)
+async def toggle_req_callback(client: Client, cq: CallbackQuery):
+    channel_id = int(cq.matches[0].group(1))
+    current = await CosmicBotz.get_req_mode(channel_id)
+    new_state = not current
+    await CosmicBotz.set_req_mode(channel_id, new_state)
+    state_str = "✅ ON" if new_state else "❌ OFF"
+    await cq.answer(f"Auto-Approve is now {state_str}", show_alert=True)
+    # Refresh the info panel
+    await channel_info_callback(client, cq)
 
 
 @Client.on_callback_query(filters.regex(r"^rmch:(-?\d+)$") & admin_filter)
@@ -197,7 +251,6 @@ async def remove_channel_callback(client: Client, cq: CallbackQuery):
     channel_id = int(cq.matches[0].group(1))
     await CosmicBotz.remove_channel(channel_id)
     await cq.answer(f"Channel {channel_id} removed.", show_alert=True)
-    # Go back to page 0
     channels = await CosmicBotz.get_all_channels()
     if channels:
         await _send_channels_page(client, cq, channels, page=0)
@@ -206,7 +259,7 @@ async def remove_channel_callback(client: Client, cq: CallbackQuery):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  /links  — text list with deep-links
+#  /links  — text list of normal deep-links
 # ──────────────────────────────────────────────────────────────────────────────
 
 @Client.on_message(filters.command("links") & filters.private & admin_filter)
@@ -216,34 +269,20 @@ async def list_links(client: Client, message: Message):
         await message.reply_text("📭 No channels registered.")
         return
 
-    bot_info = await client.get_me()
-    lines = ["<b>📋 All Channel Deep-Links:</b>\n"]
+    wait = await message.reply_text("⏳ Building links…")
+    lines = ["<b>📋 Normal Deep-Links:</b>\n"]
     for ch in channels:
         ch_id = ch["_id"]
         name = ch.get("name") or str(ch_id)
-        token = await encode_channel_id(ch_id)
-        link = f"https://t.me/{bot_info.username}?start={token}"
-        lines.append(f"• <b>{name}</b>\n  <code>{link}</code>")
+        normal_link, _ = await build_links(client, ch_id)
+        lines.append(f"• <b>{name}</b>\n  <code>{normal_link}</code>")
 
-    # Split into chunks if very long
-    text = "\n\n".join(lines)
-    if len(text) > 4000:
-        chunks = [lines[0]]
-        buf = []
-        for line in lines[1:]:
-            buf.append(line)
-            if len("\n\n".join(buf)) > 3500:
-                await message.reply_text("\n\n".join(chunks + buf[:-1]), disable_web_page_preview=True)
-                chunks = []
-                buf = [line]
-        if buf:
-            await message.reply_text("\n\n".join(chunks + buf), disable_web_page_preview=True)
-    else:
-        await message.reply_text(text, disable_web_page_preview=True)
+    await wait.delete()
+    await _send_chunked(message, "\n\n".join(lines))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  /reqlink  — request-join links (paginated)
+#  /reqlink  — text list of request deep-links
 # ──────────────────────────────────────────────────────────────────────────────
 
 @Client.on_message(filters.command("reqlink") & filters.private & admin_filter)
@@ -253,25 +292,20 @@ async def req_links(client: Client, message: Message):
         await message.reply_text("📭 No channels registered.")
         return
 
-    wait = await message.reply_text("⏳ Generating join-request links…")
-    lines = ["<b>📋 Join-Request Links:</b>\n"]
-
+    wait = await message.reply_text("⏳ Building request links…")
+    lines = ["<b>📋 Request Deep-Links:</b>\n"]
     for ch in channels:
         ch_id = ch["_id"]
         name = ch.get("name") or str(ch_id)
-        link = await get_request_invite_link(client, ch_id)
-        if link:
-            lines.append(f"• <b>{name}</b>\n  <code>{link}</code>")
-        else:
-            lines.append(f"• <b>{name}</b>\n  ⚠️ Failed (bot not admin?)")
+        _, req_deep_link = await build_links(client, ch_id)
+        lines.append(f"• <b>{name}</b>\n  <code>{req_deep_link}</code>")
 
     await wait.delete()
-    text = "\n\n".join(lines)
-    await message.reply_text(text, disable_web_page_preview=True)
+    await _send_chunked(message, "\n\n".join(lines))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  /bulklink <id1> <id2> ...
+#  /bulklink <id1> <id2> ...  — show both link types for each
 # ──────────────────────────────────────────────────────────────────────────────
 
 @Client.on_message(filters.command("bulklink") & filters.private & admin_filter)
@@ -284,10 +318,11 @@ async def bulk_link(client: Client, message: Message):
         )
         return
 
-    wait = await message.reply_text(f"⏳ Generating invite links for {len(args)} channel(s)…")
-    lines = [f"<b>🔗 Bulk Invite Links ({len(args)} channels):</b>\n"]
+    wait = await message.reply_text(
+        f"⏳ Generating links for <b>{len(args)}</b> channel(s)…"
+    )
+    lines = [f"<b>🔗 Bulk Links ({len(args)} channels):</b>\n"]
 
-    bot_info = await client.get_me()
     for raw_id in args:
         try:
             ch_id = int(raw_id)
@@ -295,17 +330,43 @@ async def bulk_link(client: Client, message: Message):
             lines.append(f"• <code>{raw_id}</code> — ❌ Invalid ID")
             continue
 
-        link = await get_invite_link(client, ch_id)
         try:
             chat = await client.get_chat(ch_id)
             name = chat.title or raw_id
         except Exception:
             name = raw_id
 
-        if link:
-            lines.append(f"• <b>{name}</b>\n  <code>{link}</code>")
-        else:
-            lines.append(f"• <b>{name}</b> — ⚠️ Failed")
+        normal_link, req_deep_link = await build_links(client, ch_id)
+        lines.append(
+            f"• <b>{name}</b>  (<code>{ch_id}</code>)\n"
+            f"  🔗 Normal : <code>{normal_link}</code>\n"
+            f"  📩 Request: <code>{req_deep_link}</code>"
+        )
 
     await wait.delete()
-    await message.reply_text("\n\n".join(lines), disable_web_page_preview=True)
+    await _send_chunked(message, "\n\n".join(lines))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Internal: chunked message sender (avoids 4096-char limit)
+# ──────────────────────────────────────────────────────────────────────────────
+
+async def _send_chunked(message: Message, text: str, chunk_size: int = 3800):
+    """Split long text and send as multiple messages."""
+    if len(text) <= chunk_size:
+        await message.reply_text(text, disable_web_page_preview=True)
+        return
+
+    lines = text.split("\n\n")
+    buf = []
+    for line in lines:
+        candidate = "\n\n".join(buf + [line])
+        if len(candidate) > chunk_size and buf:
+            await message.reply_text(
+                "\n\n".join(buf), disable_web_page_preview=True
+            )
+            buf = [line]
+        else:
+            buf.append(line)
+    if buf:
+        await message.reply_text("\n\n".join(buf), disable_web_page_preview=True)
