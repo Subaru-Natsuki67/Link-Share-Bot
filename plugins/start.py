@@ -32,61 +32,86 @@ logger = LOGGER(__name__)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Built-in default texts  (used when env vars are empty)
+#  Default texts — small caps + blockquote style
 # ──────────────────────────────────────────────────────────────────────────────
 
 _DEFAULT_START = (
-    "👋 <b>Hello, {mention}!</b>\n\n"
-    "I help share <b>private Telegram channel links</b> securely.\n\n"
-    "✅ Links are <b>temporary & single-use</b> — no permanent invite URLs ever exposed.\n"
-    "🔒 Channels stay protected from copyright strikes.\n\n"
-    "Tap <b>Help</b> below for the full command list."
+    "<b>ʜᴇʏ {mention}!</b>\n\n"
+    "ɪ'ᴍ <b>ɴᴇxᴜs</b> — ʏᴏᴜʀ sᴇᴄᴜʀᴇ ᴄʜᴀɴɴᴇʟ ʟɪɴᴋ ᴍᴀɴᴀɢᴇʀ.\n\n"
+    "ɪ ɢᴇɴᴇʀᴀᴛᴇ <b>ᴛᴇᴍᴘᴏʀᴀʀʏ, sɪɴɢʟᴇ-ᴜsᴇ ɪɴᴠɪᴛᴇ ʟɪɴᴋs</b> ꜰᴏʀ ᴘʀɪᴠᴀᴛᴇ "
+    "ᴛᴇʟᴇɢʀᴀᴍ ᴄʜᴀɴɴᴇʟs sᴏ ᴛʜᴇ ʀᴇᴀʟ ɪɴᴠɪᴛᴇ ɪs ɴᴇᴠᴇʀ ʟᴇᴀᴋᴇᴅ ᴘᴜʙʟɪᴄʟʏ. "
+    "ᴇᴠᴇʀʏ ᴄʟɪᴄᴋ ᴄʀᴇᴀᴛᴇs ᴀ ꜰʀᴇsʜ ʟɪɴᴋ ᴛʜᴀᴛ ᴇxᴘɪʀᴇs ɪɴ ᴍɪɴᴜᴛᴇs.\n\n"
+    "<blockquote>"
+    "❍ ᴅᴇᴠᴇʟᴏᴘᴇʀ : <a href='https://t.me/VoidxTora'>@VoidxTora</a>\n"
+    "❍ ᴍᴀɪɴᴛᴀɪɴᴇᴅ ʙʏ : <a href='https://t.me/VoidxTora'>@VoidxTora</a>\n"
+    "❍ ᴘʀᴏᴊᴇᴄᴛ : <a href='https://t.me/CosmicBotz'>@CosmicBotz</a>"
+    "</blockquote>"
 )
 
 _DEFAULT_HELP = (
-    "📖 <b>Help — How This Bot Works</b>\n\n"
-    "This bot gives you a <b>secure temporary link</b> to join a private "
-    "Telegram channel — the real invite is never shared publicly.\n\n"
-    "<b>For users:</b>\n"
-    "• Tap a share link you received from the channel.\n"
-    "• Normal link → instant join (valid 5 min, single-use).\n"
-    "• Request link → sends a join request; admin approves.\n"
-    "• If your link expired, click the original post link again.\n\n"
-    "<b>For admins:</b>\n"
-    "• <code>/addch &lt;id&gt;</code> — register a channel\n"
-    "• <code>/delch &lt;id&gt;</code> — remove a channel\n"
-    "• <code>/channels</code> — manage & get links\n"
-    "• <code>/links</code> — all normal deep-links\n"
-    "• <code>/reqlink</code> — all request deep-links\n"
-    "• <code>/reqmode &lt;id&gt;</code> — toggle auto-approve requests\n"
-    "• <code>/broadcast</code> — message all users\n"
-    "• <code>/logs</code> — download log file (owner only)\n"
-    "• <code>/stats</code> — bot statistics (owner only)"
+    "<b>ɴᴇxᴜs — ʜᴇʟᴘ</b>\n\n"
+    "<blockquote>"
+    "ᴛᴀᴘ ᴀɴʏ sʜᴀʀᴇ ʟɪɴᴋ ᴘᴏsᴛᴇᴅ ʙʏ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ — ɪ'ʟʟ ʜᴀɴᴅʟᴇ ᴛʜᴇ ʀᴇsᴛ.\n"
+    "ɴᴏʀᴍᴀʟ ʟɪɴᴋ ɢɪᴠᴇs ᴀ ᴅɪʀᴇᴄᴛ ɪɴᴠɪᴛᴇ (5 ᴍɪɴ, sɪɴɢʟᴇ-ᴜsᴇ).\n"
+    "ʀᴇǫᴜᴇsᴛ ʟɪɴᴋ sᴇɴᴅs ᴀ ᴊᴏɪɴ ʀᴇǫᴜᴇsᴛ ꜰᴏʀ ᴀᴅᴍɪɴ ᴀᴘᴘʀᴏᴠᴀʟ.\n"
+    "ʟɪɴᴋ ᴇxᴘɪʀᴇᴅ? ᴛᴀᴘ ᴛʜᴇ ᴏʀɪɢɪɴᴀʟ ᴘᴏsᴛ ʟɪɴᴋ ᴀɢᴀɪɴ."
+    "</blockquote>\n\n"
+    "<b>❍ ᴀᴅᴍɪɴ ᴄᴏᴍᴍᴀɴᴅs</b>\n\n"
+    "<blockquote>"
+    "/addch — ʀᴇɢɪsᴛᴇʀ ᴀ ᴄʜᴀɴɴᴇʟ\n"
+    "/delch — ʀᴇᴍᴏᴠᴇ ᴀ ᴄʜᴀɴɴᴇʟ\n"
+    "/channels — ᴍᴀɴᴀɢᴇ ᴄʜᴀɴɴᴇʟs & ᴄᴏᴘʏ ʟɪɴᴋs\n"
+    "/links — ᴀʟʟ ɴᴏʀᴍᴀʟ ᴅᴇᴇᴘ-ʟɪɴᴋs\n"
+    "/reqlink — ᴀʟʟ ʀᴇǫᴜᴇsᴛ ᴅᴇᴇᴘ-ʟɪɴᴋs\n"
+    "/bulklink — ʙᴏᴛʜ ʟɪɴᴋs ꜰᴏʀ ᴍᴜʟᴛɪᴘʟᴇ ᴄʜᴀɴɴᴇʟs\n"
+    "/reqmode — ᴛᴏɢɢʟᴇ ᴀᴜᴛᴏ-ᴀᴘᴘʀᴏᴠᴇ ᴊᴏɪɴ ʀᴇǫᴜᴇsᴛs\n"
+    "/reqtime — sᴇᴛ ᴀᴜᴛᴏ-ᴀᴘᴘʀᴏᴠᴇ ᴅᴇʟᴀʏ ɪɴ sᴇᴄᴏɴᴅs"
+    "</blockquote>\n\n"
+    "<b>❍ ᴏᴡɴᴇʀ ᴄᴏᴍᴍᴀɴᴅs</b>\n\n"
+    "<blockquote>"
+    "/broadcast — ᴍᴇssᴀɢᴇ ᴀʟʟ ᴜsᴇʀs\n"
+    "/stats — ᴅʙ & ᴜᴘᴛɪᴍᴇ sᴛᴀᴛs\n"
+    "/logs — ᴅᴏᴡɴʟᴏᴀᴅ ʟᴏɢ ꜰɪʟᴇ\n"
+    "/cleanup — ʀᴇᴍᴏᴠᴇ ʙʟᴏᴄᴋᴇᴅ ᴜsᴇʀs"
+    "</blockquote>\n\n"
+    "<blockquote>"
+    "❍ ᴍᴀɪɴᴛᴀɪɴᴇᴅ ʙʏ <a href='https://t.me/VoidxTora'>@VoidxTora</a> — "
+    "<a href='https://t.me/CosmicBotz'>@CosmicBotz</a>"
+    "</blockquote>"
 )
 
 _DEFAULT_ABOUT = (
-    "ℹ️ <b>About This Bot</b>\n\n"
-    "🤖 <b>CosmicBotz Link Share Bot</b>\n"
-    "Built with ❤️ using PyroFork + MongoDB.\n\n"
-    "🔒 Keeps private channels safe — no permanent invite links ever exposed.\n\n"
-    "⚡ <b>Features:</b>\n"
-    "• Temp single-use invite links (5 min expiry)\n"
-    "• Temp request-join links (admin approves)\n"
-    "• Auto-approve join requests with optional delay\n"
-    "• Force-subscribe gate before link access\n"
-    "• Broadcast to all users\n"
-    "• Multiple start pictures (random pick)\n"
-    "• Fully config-driven — no DB needed for bot texts"
+    "<b>ɴᴇxᴜs ʟɪɴᴋ sʜᴀʀᴇ ʙᴏᴛ</b>\n\n"
+    "<blockquote>"
+    "❍ ʜᴏsᴛᴇᴅ ᴏɴ : ʀᴇɴᴅᴇʀ\n"
+    "❍ ᴅᴀᴛᴀʙᴀsᴇ : ᴍᴏɴɢᴏ ᴅʙ\n"
+    "❍ ʟᴀɴɢᴜᴀɢᴇ : ᴘʏᴛʜᴏɴ 3\n"
+    "❍ ꜰʀᴀᴍᴇᴡᴏʀᴋ : ᴘʏʀᴏꜰᴏʀᴋ\n"
+    "❍ ᴅᴇᴠᴇʟᴏᴘᴇʀ : <a href='https://t.me/VoidxTora'>@VoidxTora</a>\n"
+    "❍ ᴍᴀɪɴᴛᴀɪɴᴇᴅ ʙʏ : <a href='https://t.me/VoidxTora'>@VoidxTora</a>\n"
+    "❍ ᴘʀᴏᴊᴇᴄᴛ : <a href='https://t.me/CosmicBotz'>@CosmicBotz</a>"
+    "</blockquote>\n\n"
+    "<b>❍ ꜰᴇᴀᴛᴜʀᴇs</b>\n\n"
+    "<blockquote>"
+    "➻ ᴛᴇᴍᴘ sɪɴɢʟᴇ-ᴜsᴇ ɪɴᴠɪᴛᴇ ʟɪɴᴋs (ᴀᴜᴛᴏ-ᴇxᴘɪʀᴇ)\n"
+    "➻ ᴛᴇᴍᴘ ʀᴇǫᴜᴇsᴛ-ᴊᴏɪɴ ʟɪɴᴋs (ᴀᴅᴍɪɴ ᴀᴘᴘʀᴏᴠᴇs)\n"
+    "➻ ᴀᴜᴛᴏ-ᴀᴘᴘʀᴏᴠᴇ ᴊᴏɪɴ ʀᴇǫᴜᴇsᴛs ᴡɪᴛʜ ᴅᴇʟᴀʏ sᴜᴘᴘᴏʀᴛ\n"
+    "➻ ꜰᴏʀᴄᴇ-sᴜʙsᴄʀɪʙᴇ ɢᴀᴛᴇ ʙᴇꜰᴏʀᴇ ʟɪɴᴋ ᴅᴇʟɪᴠᴇʀʏ\n"
+    "➻ ᴘᴀɢɪɴᴀᴛᴇᴅ ᴄʜᴀɴɴᴇʟ ᴍᴀɴᴀɢᴇᴍᴇɴᴛ ᴘᴀɴᴇʟ\n"
+    "➻ ʙʀᴏᴀᴅᴄᴀsᴛ sʏsᴛᴇᴍ ᴡɪᴛʜ ʟɪᴠᴇ ᴘʀᴏɢʀᴇss\n"
+    "➻ ᴍᴜʟᴛɪ-ᴘɪᴄ sᴛᴀʀᴛ sᴄʀᴇᴇɴ (ʀᴀɴᴅᴏᴍ ᴘɪᴄᴋ)\n"
+    "➻ ɢʟᴏʙᴀʟ ᴇʀʀᴏʀ ʜᴀɴᴅʟᴇʀ — ʙᴏᴛ ɴᴇᴠᴇʀ ᴄʀᴀsʜᴇs\n"
+    "➻ ᴄʟɪᴄᴋ ᴏɴ ᴛʜᴇ ʙᴜᴛᴛᴏɴs ʙᴇʟᴏᴡ ꜰᴏʀ ᴍᴏʀᴇ ɪɴꜰᴏ."
+    "</blockquote>"
 )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Text / pic helpers
+#  Text / pic resolvers
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _start_text(mention: str) -> str:
-    base = START_TEXT or _DEFAULT_START
-    return base.replace("{mention}", mention)
+    return (START_TEXT or _DEFAULT_START).replace("{mention}", mention)
 
 def _help_text() -> str:
     return HELP_TEXT or _DEFAULT_HELP
@@ -95,33 +120,29 @@ def _about_text() -> str:
     return ABOUT_TEXT or _DEFAULT_ABOUT
 
 def _pick_pic() -> str | None:
-    """Pick a random URL from START_PICS, or None if list is empty."""
     return random.choice(START_PICS) if START_PICS else None
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Keyboard builders
+#  Keyboards  (button labels in small caps)
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def _start_keyboard(client: Client) -> InlineKeyboardMarkup:
     me = await client.get_me()
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("👤 Owner", url=f"tg://user?id={OWNER_ID}"),
-            InlineKeyboardButton(
-                "➕ Add to Channel",
-                url=f"https://t.me/{me.username}?startchannel=true",
-            ),
+            InlineKeyboardButton("❍ ᴏᴡɴᴇʀ",          url=f"tg://user?id={OWNER_ID}"),
+            InlineKeyboardButton("➕ ᴀᴅᴅ ᴛᴏ ᴄʜᴀɴɴᴇʟ", url=f"https://t.me/{me.username}?startchannel=true"),
         ],
         [
-            InlineKeyboardButton("❓ Help",  callback_data="cb_help"),
-            InlineKeyboardButton("ℹ️ About", callback_data="cb_about"),
+            InlineKeyboardButton("❓ ʜᴇʟᴘ",  callback_data="cb_help"),
+            InlineKeyboardButton("ℹ ᴀʙᴏᴜᴛ", callback_data="cb_about"),
         ],
     ])
 
 def _back_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("🔙 Back", callback_data="cb_start")]]
+        [[InlineKeyboardButton("« ʙᴀᴄᴋ", callback_data="cb_start")]]
     )
 
 
@@ -134,21 +155,21 @@ async def start_handler(client: Client, message: Message):
     user = message.from_user
     try:
         if await CosmicBotz.add_user(user.id):
-            logger.info("New user registered: %s (%s)", user.id, user.username)
+            logger.info("ɴᴇᴡ ᴜsᴇʀ: %s (%s)", user.id, user.username)
     except Exception as e:
         logger.warning("DB add_user failed for %s: %s", user.id, e)
 
     args = message.command
 
-    # ── Deep-link flow ────────────────────────────────────────────────────────
+    # ── Deep-link ─────────────────────────────────────────────────────────────
     if len(args) > 1:
         token = args[1]
         channel_id, is_req = await decode_channel_token(token)
 
         if channel_id is None:
             await message.reply_text(
-                "❌ <b>Invalid or expired link.</b>\n"
-                "Please click the original post link again to get a fresh one."
+                "<b>ɪɴᴠᴀʟɪᴅ ᴏʀ ᴇxᴘɪʀᴇᴅ ʟɪɴᴋ.</b>\n\n"
+                "<blockquote>ᴘʟᴇᴀsᴇ ᴛᴀᴘ ᴛʜᴇ ᴏʀɪɢɪɴᴀʟ ᴘᴏsᴛ ʟɪɴᴋ ᴀɢᴀɪɴ ᴛᴏ ɢᴇᴛ ᴀ ꜰʀᴇsʜ ᴏɴᴇ.</blockquote>"
             )
             return
 
@@ -156,79 +177,76 @@ async def start_handler(client: Client, message: Message):
         if FORCE_SUB_CHANNEL and not await is_subscribed(client, user.id):
             kb = await _force_sub_keyboard(client, token)
             await message.reply_text(
-                "🔒 <b>You must join our channel to use this bot.</b>\n\n"
-                "Click the button below, then tap <b>I've Joined</b>.",
+                "<b>ʏᴏᴜ ɴᴇᴇᴅ ᴛᴏ ᴊᴏɪɴ ᴏᴜʀ ᴄʜᴀɴɴᴇʟ ꜰɪʀsᴛ.</b>\n\n"
+                "<blockquote>ᴛᴀᴘ ᴛʜᴇ ʙᴜᴛᴛᴏɴ ʙᴇʟᴏᴡ, ᴛʜᴇɴ ᴛᴀᴘ <b>ɪ'ᴠᴇ ᴊᴏɪɴᴇᴅ</b>.</blockquote>",
                 reply_markup=kb,
             )
             return
 
-        # Ensure channel is known — auto-register if bot is still admin
+        # Auto-register channel if bot is still admin there
         if not await CosmicBotz.is_channel_exist(channel_id):
             try:
                 chat = await client.get_chat(channel_id)
                 await CosmicBotz.add_channel(channel_id, chat.title or str(channel_id))
             except Exception:
                 await message.reply_text(
-                    "❌ <b>This channel is no longer accessible.</b>\n"
-                    "The bot may have been removed or the channel was deleted."
+                    "<b>ᴛʜɪs ᴄʜᴀɴɴᴇʟ ɪs ɴᴏ ʟᴏɴɢᴇʀ ᴀᴄᴄᴇssɪʙʟᴇ.</b>\n\n"
+                    "<blockquote>ᴛʜᴇ ʙᴏᴛ ᴍᴀʏ ʜᴀᴠᴇ ʙᴇᴇɴ ʀᴇᴍᴏᴠᴇᴅ ᴏʀ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ ᴡᴀs ᴅᴇʟᴇᴛᴇᴅ.</blockquote>"
                 )
                 return
 
         channel_doc = await CosmicBotz.get_channel(channel_id)
         ch_name = (channel_doc or {}).get("name") or str(channel_id)
 
-        # ── Request-join flow ─────────────────────────────────────────────────
+        # ── Request-join ──────────────────────────────────────────────────────
         if is_req:
-            wait_msg = await message.reply_text("⏳ <i>Generating your link…</i>")
+            wait_msg = await message.reply_text("<i>ɢᴇɴᴇʀᴀᴛɪɴɢ ʏᴏᴜʀ ʟɪɴᴋ...</i>")
             req_url  = await get_request_invite_link(client, channel_id)
             await safe_delete(wait_msg)
 
             if not req_url:
                 await message.reply_text(
-                    "⚠️ <b>Failed to generate link.</b>\n"
-                    "The bot may not have invite-link admin rights in that channel."
+                    "<b>ᴄᴏᴜʟᴅ ɴᴏᴛ ɢᴇɴᴇʀᴀᴛᴇ ᴀ ʟɪɴᴋ.</b>\n\n"
+                    "<blockquote>ᴛʜᴇ ʙᴏᴛ ᴍᴀʏ ɴᴏᴛ ʜᴀᴠᴇ ɪɴᴠɪᴛᴇ-ʟɪɴᴋ ᴀᴅᴍɪɴ ʀɪɢʜᴛs ɪɴ ᴛʜɪs ᴄʜᴀɴɴᴇʟ.</blockquote>"
                 )
                 return
 
-            keyboard = InlineKeyboardMarkup([[
-                InlineKeyboardButton("📩 Request to Join", url=req_url)
-            ]])
             await message.reply_text(
                 f"ʜᴇʀᴇ ɪs ʏᴏᴜʀ ʟɪɴᴋ! ᴄʟɪᴄᴋ ʙᴇʟᴏᴡ ᴛᴏ ᴘʀᴏᴄᴇᴇᴅ\n\n"
-                f"📢 <b>{ch_name}</b>\n\n"
-                "<i>Note: If the link is expired, please click the post link again to get a new one.</i>",
-                reply_markup=keyboard,
+                f"<b>{ch_name}</b>\n\n"
+                "<blockquote>ɴᴏᴛᴇ: ɪꜰ ᴛʜᴇ ʟɪɴᴋ ɪs ᴇxᴘɪʀᴇᴅ, ᴘʟᴇᴀsᴇ ᴛᴀᴘ ᴛʜᴇ ᴘᴏsᴛ ʟɪɴᴋ ᴀɢᴀɪɴ ᴛᴏ ɢᴇᴛ ᴀ ɴᴇᴡ ᴏɴᴇ.</blockquote>",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("➻ ʀᴇǫᴜᴇsᴛ ᴛᴏ ᴊᴏɪɴ", url=req_url)
+                ]]),
                 disable_web_page_preview=True,
             )
             return
 
-        # ── Normal (temp invite) flow ─────────────────────────────────────────
-        wait_msg   = await message.reply_text("⏳ <i>Generating your link…</i>")
+        # ── Normal invite ─────────────────────────────────────────────────────
+        wait_msg   = await message.reply_text("<i>ɢᴇɴᴇʀᴀᴛɪɴɢ ʏᴏᴜʀ ʟɪɴᴋ...</i>")
         invite_url = await get_invite_link(client, channel_id)
         await safe_delete(wait_msg)
 
         if not invite_url:
             await message.reply_text(
-                "⚠️ <b>Failed to generate invite link.</b>\n"
-                "The bot may not have admin rights in that channel.\n\n"
-                "<i>Please click the post link again to retry.</i>"
+                "<b>ᴄᴏᴜʟᴅ ɴᴏᴛ ɢᴇɴᴇʀᴀᴛᴇ ᴀɴ ɪɴᴠɪᴛᴇ ʟɪɴᴋ.</b>\n\n"
+                "<blockquote>ᴛʜᴇ ʙᴏᴛ ᴍᴀʏ ɴᴏᴛ ʜᴀᴠᴇ ᴀᴅᴍɪɴ ʀɪɢʜᴛs. ᴛᴀᴘ ᴛʜᴇ ᴏʀɪɢɪɴᴀʟ ᴘᴏsᴛ ʟɪɴᴋ ᴛᴏ ʀᴇᴛʀʏ.</blockquote>"
             )
             return
 
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("📢 Join Now", url=invite_url)
-        ]])
         await message.reply_text(
             f"ʜᴇʀᴇ ɪs ʏᴏᴜʀ ʟɪɴᴋ! ᴄʟɪᴄᴋ ʙᴇʟᴏᴡ ᴛᴏ ᴘʀᴏᴄᴇᴇᴅ\n\n"
-            f"📢 <b>{ch_name}</b>\n\n"
-            "⏳ <b>This link expires in 5 minutes and is single-use.</b>\n"
-            "<i>Note: If the link is expired, please click the post link again to get a new one.</i>",
-            reply_markup=keyboard,
+            f"<b>{ch_name}</b>\n\n"
+            "<blockquote>ᴛʜɪs ʟɪɴᴋ ᴇxᴘɪʀᴇs ɪɴ 5 ᴍɪɴᴜᴛᴇs ᴀɴᴅ ɪs sɪɴɢʟᴇ-ᴜsᴇ.\n"
+            "ɴᴏᴛᴇ: ɪꜰ ᴛʜᴇ ʟɪɴᴋ ɪs ᴇxᴘɪʀᴇᴅ, ᴘʟᴇᴀsᴇ ᴛᴀᴘ ᴛʜᴇ ᴘᴏsᴛ ʟɪɴᴋ ᴀɢᴀɪɴ ᴛᴏ ɢᴇᴛ ᴀ ɴᴇᴡ ᴏɴᴇ.</blockquote>",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("➻ ᴊᴏɪɴ ɴᴏᴡ", url=invite_url)
+            ]]),
             disable_web_page_preview=True,
         )
         return
 
-    # ── Plain /start — welcome ────────────────────────────────────────────────
+    # ── Plain /start ──────────────────────────────────────────────────────────
     text     = _start_text(user.mention)
     pic      = _pick_pic()
     keyboard = await _start_keyboard(client)
@@ -238,7 +256,7 @@ async def start_handler(client: Client, message: Message):
             await message.reply_photo(photo=pic, caption=text, reply_markup=keyboard)
             return
         except Exception as e:
-            logger.warning("Start photo failed (url=%s): %s — falling back to text.", pic, e)
+            logger.warning("Start photo failed (url=%s): %s — using text fallback.", pic, e)
 
     await message.reply_text(text, reply_markup=keyboard, disable_web_page_preview=True)
 
@@ -314,13 +332,13 @@ async def _force_sub_keyboard(client: Client, deep_token: str) -> InlineKeyboard
         link = "https://t.me"
 
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔔 Join Channel", url=link)],
-        [InlineKeyboardButton("✅ I've Joined",  callback_data=f"check_sub:{deep_token}")],
+        [InlineKeyboardButton("➕ ᴊᴏɪɴ ᴄʜᴀɴɴᴇʟ", url=link)],
+        [InlineKeyboardButton("✓ ɪ'ᴠᴇ ᴊᴏɪɴᴇᴅ",  callback_data=f"check_sub:{deep_token}")],
     ])
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Force-sub verification callback
+#  Force-sub verify callback
 # ──────────────────────────────────────────────────────────────────────────────
 
 @Client.on_callback_query(filters.regex(r"^check_sub:(.+)$"))
@@ -329,19 +347,19 @@ async def check_sub_callback(client: Client, cq: CallbackQuery):
     token = cq.matches[0].group(1)
 
     if not await is_subscribed(client, user.id):
-        await _safe_answer(cq, "❌ You haven't joined yet! Please join and try again.", alert=True)
+        await _safe_answer(cq, "ʏᴏᴜ ʜᴀᴠᴇɴ'ᴛ ᴊᴏɪɴᴇᴅ ʏᴇᴛ. ᴘʟᴇᴀsᴇ ᴊᴏɪɴ ᴀɴᴅ ᴛʀʏ ᴀɢᴀɪɴ.", alert=True)
         return
 
-    await _safe_answer(cq, "✅ Verified!")
+    await _safe_answer(cq, "✓ ᴠᴇʀɪꜰɪᴇᴅ!")
     await safe_delete(cq.message)
 
     channel_id, is_req = await decode_channel_token(token)
     if channel_id is None:
-        await client.send_message(user.id, "❌ Invalid or expired link.")
+        await client.send_message(user.id, "<b>ɪɴᴠᴀʟɪᴅ ᴏʀ ᴇxᴘɪʀᴇᴅ ʟɪɴᴋ.</b>")
         return
 
     if not await CosmicBotz.is_channel_exist(channel_id):
-        await client.send_message(user.id, "❌ Channel is no longer registered.")
+        await client.send_message(user.id, "<b>ᴄʜᴀɴɴᴇʟ ɪs ɴᴏ ʟᴏɴɢᴇʀ ʀᴇɢɪsᴛᴇʀᴇᴅ.</b>")
         return
 
     channel_doc = await CosmicBotz.get_channel(channel_id)
@@ -352,18 +370,18 @@ async def check_sub_callback(client: Client, cq: CallbackQuery):
         if not req_url:
             await client.send_message(
                 user.id,
-                "⚠️ Failed to generate request link. Bot may lack admin rights."
+                "<b>ᴄᴏᴜʟᴅ ɴᴏᴛ ɢᴇɴᴇʀᴀᴛᴇ ᴀ ʟɪɴᴋ.</b>\n\n"
+                "<blockquote>ʙᴏᴛ ᴍᴀʏ ʟᴀᴄᴋ ᴀᴅᴍɪɴ ʀɪɢʜᴛs.</blockquote>"
             )
             return
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("📩 Request to Join", url=req_url)
-        ]])
         await client.send_message(
             user.id,
             f"ʜᴇʀᴇ ɪs ʏᴏᴜʀ ʟɪɴᴋ! ᴄʟɪᴄᴋ ʙᴇʟᴏᴡ ᴛᴏ ᴘʀᴏᴄᴇᴇᴅ\n\n"
-            f"📢 <b>{ch_name}</b>\n\n"
-            "<i>Note: If the link is expired, please click the post link again to get a new one.</i>",
-            reply_markup=keyboard,
+            f"<b>{ch_name}</b>\n\n"
+            "<blockquote>ɴᴏᴛᴇ: ɪꜰ ᴛʜᴇ ʟɪɴᴋ ɪs ᴇxᴘɪʀᴇᴅ, ᴛᴀᴘ ᴛʜᴇ ᴏʀɪɢɪɴᴀʟ ᴘᴏsᴛ ʟɪɴᴋ ᴛᴏ ɢᴇᴛ ᴀ ɴᴇᴡ ᴏɴᴇ.</blockquote>",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("➻ ʀᴇǫᴜᴇsᴛ ᴛᴏ ᴊᴏɪɴ", url=req_url)
+            ]]),
         )
         return
 
@@ -371,31 +389,29 @@ async def check_sub_callback(client: Client, cq: CallbackQuery):
     if not invite_url:
         await client.send_message(
             user.id,
-            "⚠️ Failed to generate invite link. Bot may lack admin rights."
+            "<b>ᴄᴏᴜʟᴅ ɴᴏᴛ ɢᴇɴᴇʀᴀᴛᴇ ᴀɴ ɪɴᴠɪᴛᴇ ʟɪɴᴋ.</b>\n\n"
+            "<blockquote>ʙᴏᴛ ᴍᴀʏ ʟᴀᴄᴋ ᴀᴅᴍɪɴ ʀɪɢʜᴛs.</blockquote>"
         )
         return
 
-    keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton("📢 Join Now", url=invite_url)
-    ]])
     await client.send_message(
         user.id,
         f"ʜᴇʀᴇ ɪs ʏᴏᴜʀ ʟɪɴᴋ! ᴄʟɪᴄᴋ ʙᴇʟᴏᴡ ᴛᴏ ᴘʀᴏᴄᴇᴇᴅ\n\n"
-        f"📢 <b>{ch_name}</b>\n\n"
-        "⏳ <b>Expires in 5 minutes. Single-use only.</b>\n"
-        "<i>Note: If the link is expired, please click the post link again to get a new one.</i>",
-        reply_markup=keyboard,
+        f"<b>{ch_name}</b>\n\n"
+        "<blockquote>ᴛʜɪs ʟɪɴᴋ ᴇxᴘɪʀᴇs ɪɴ 5 ᴍɪɴᴜᴛᴇs ᴀɴᴅ ɪs sɪɴɢʟᴇ-ᴜsᴇ.\n"
+        "ɴᴏᴛᴇ: ɪꜰ ᴛʜᴇ ʟɪɴᴋ ɪs ᴇxᴘɪʀᴇᴅ, ᴛᴀᴘ ᴛʜᴇ ᴏʀɪɢɪɴᴀʟ ᴘᴏsᴛ ʟɪɴᴋ ᴛᴏ ɢᴇᴛ ᴀ ɴᴇᴡ ᴏɴᴇ.</blockquote>",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("➻ ᴊᴏɪɴ ɴᴏᴡ", url=invite_url)
+        ]]),
     )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Internal: safe callback answer (never crash on expired query)
+#  Internal helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def _safe_answer(cq: CallbackQuery, text: str = "", alert: bool = False) -> None:
     try:
         await cq.answer(text, show_alert=alert)
-    except QueryIdInvalid:
+    except (QueryIdInvalid, Exception):
         pass
-    except Exception as e:
-        logger.debug("cq.answer failed: %s", e)
