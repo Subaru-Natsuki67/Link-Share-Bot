@@ -7,7 +7,7 @@ from pyrogram import Client, filters
 from pyrogram.errors import FloodWait, InputUserDeactivated, UserIsBlocked
 from pyrogram.types import Message
 
-from config import ADMINS, LOG_FILE_NAME, LOGGER, OWNER_ID
+from config import ADMINS, LOGGER, OWNER_ID
 from database import CosmicBotz
 
 logger = LOGGER(__name__)
@@ -15,7 +15,10 @@ logger = LOGGER(__name__)
 admin_filter = filters.user(ADMINS)
 owner_filter = filters.user([OWNER_ID])
 
-# ── Roast lines — small caps ──────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+#  Roasts for non-admins trying admin commands
+# ──────────────────────────────────────────────────────────────────────────────
+
 _ROASTS = [
     "ʙʀᴏ ʀᴇᴀʟʟʏ ᴛʜᴏᴜɢʜᴛ ʜᴇ ᴡᴀs ᴀɴ ᴀᴅᴍɪɴ. 💀",
     "ᴛʜᴇ ᴀᴜᴅᴀᴄɪᴛʏ. ɢᴇɴᴜɪɴᴇʟʏ ɪᴍᴘʀᴇssɪᴠᴇ.",
@@ -39,22 +42,19 @@ _ROASTS = [
 def _roast() -> str:
     return random.choice(_ROASTS)
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-#  Non-admin intercept
-# ──────────────────────────────────────────────────────────────────────────────
-
-_ADMIN_COMMANDS = [
-    "stats", "status", "broadcast", "cleanup", "users", "logs",
-    "addch", "delch", "channels", "links", "reqlink", "bulklink",
-    "reqmode", "reqtime", "approveon", "approveoff",
-]
+# Handler that fires BEFORE admin commands for non-admins — catches all
+# admin-only commands and returns a roast instead of silently ignoring.
+_ADMIN_CMDS = ["stats", "status", "users", "broadcast", "cleanup", "logs",
+               "addch", "delch", "channels", "links", "reqlink", "bulklink",
+               "reqmode", "reqtime", "approveon", "approveoff"]
 
 @Client.on_message(
-    filters.command(_ADMIN_COMMANDS) & filters.private & ~filters.user(ADMINS)
+    filters.command(_ADMIN_CMDS) & filters.private & ~filters.user(ADMINS),
+    group=-1,   # lower group number = higher priority in Pyrogram
 )
 async def roast_non_admin(client: Client, message: Message):
-    await message.reply_text(_roast())
+    await message.reply_text(f"<blockquote>{_roast()}</blockquote>")
+    message.stop_propagation()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -63,17 +63,15 @@ async def roast_non_admin(client: Client, message: Message):
 
 @Client.on_message(filters.command("stats") & filters.private & owner_filter)
 async def stats_handler(client: Client, message: Message):
-    data       = await CosmicBotz.stats()
-    uptime_str = _fmt_uptime(client.uptime)
-    me         = await client.get_me()
+    data      = await CosmicBotz.stats()
+    uptime_str = _format_uptime(client.uptime)
     await message.reply_text(
-        f"<b>❍ @{me.username} — sᴛᴀᴛɪsᴛɪᴄs</b>\n\n"
-        f"<blockquote>"
-        f"❍ ᴜsᴇʀs      :  {data['users']}\n"
-        f"❍ ᴄʜᴀɴɴᴇʟs  :  {data['channels']}\n"
-        f"❍ ᴜᴘᴛɪᴍᴇ    :  {uptime_str}"
-        f"</blockquote>\n\n"
-        f"<i><a href='https://t.me/CosmicBotz'>@CosmicBotz</a></i>"
+        "<b>📊 ʙᴏᴛ sᴛᴀᴛɪsᴛɪᴄs</b>\n\n"
+        "<blockquote>"
+        f"❍ ᴜsᴇʀs    : <b>{data['users']}</b>\n"
+        f"❍ ᴄʜᴀɴɴᴇʟs : <b>{data['channels']}</b>\n"
+        f"❍ ᴜᴘᴛɪᴍᴇ   : <b>{uptime_str}</b>"
+        "</blockquote>"
     )
 
 
@@ -83,16 +81,16 @@ async def stats_handler(client: Client, message: Message):
 
 @Client.on_message(filters.command("status") & filters.private & admin_filter)
 async def status_handler(client: Client, message: Message):
-    me         = await client.get_me()
-    uptime_str = _fmt_uptime(client.uptime)
-    data       = await CosmicBotz.stats()
+    me        = await client.get_me()
+    uptime_str = _format_uptime(client.uptime)
+    data      = await CosmicBotz.stats()
     await message.reply_text(
-        f"<b>❍ @{me.username} ɪs ᴏɴʟɪɴᴇ.</b>\n\n"
-        f"<blockquote>"
-        f"❍ ᴜᴘᴛɪᴍᴇ    :  {uptime_str}\n"
-        f"❍ ᴜsᴇʀs      :  {data['users']}\n"
-        f"❍ ᴄʜᴀɴɴᴇʟs  :  {data['channels']}"
-        f"</blockquote>"
+        f"🤖 <b>@{me.username}</b> ɪs <b>ᴏɴʟɪɴᴇ</b>!\n\n"
+        "<blockquote>"
+        f"❍ ᴜᴘᴛɪᴍᴇ   : <b>{uptime_str}</b>\n"
+        f"❍ ᴜsᴇʀs    : <b>{data['users']}</b>\n"
+        f"❍ ᴄʜᴀɴɴᴇʟs : <b>{data['channels']}</b>"
+        "</blockquote>"
     )
 
 
@@ -104,45 +102,8 @@ async def status_handler(client: Client, message: Message):
 async def users_handler(client: Client, message: Message):
     count = await CosmicBotz.total_users()
     await message.reply_text(
-        f"<blockquote>❍ ᴛᴏᴛᴀʟ ᴜsᴇʀs :  <code>{count}</code></blockquote>"
+        f"<blockquote>👤 ᴛᴏᴛᴀʟ ᴜsᴇʀs: <b>{count}</b></blockquote>"
     )
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-#  /logs  (owner only)
-# ──────────────────────────────────────────────────────────────────────────────
-
-@Client.on_message(filters.command("logs") & filters.private & owner_filter)
-async def logs_handler(client: Client, message: Message):
-    if not os.path.exists(LOG_FILE_NAME):
-        await message.reply_text("<blockquote>ɴᴏ ʟᴏɢ ꜰɪʟᴇ ꜰᴏᴜɴᴅ ʏᴇᴛ.</blockquote>")
-        return
-
-    size = os.path.getsize(LOG_FILE_NAME)
-    if size == 0:
-        await message.reply_text("<blockquote>ʟᴏɢ ꜰɪʟᴇ ɪs ᴇᴍᴘᴛʏ.</blockquote>")
-        return
-
-    wait = await message.reply_text("<i>ᴜᴘʟᴏᴀᴅɪɴɢ ʟᴏɢ ꜰɪʟᴇ...</i>")
-    try:
-        await client.send_document(
-            chat_id=message.chat.id,
-            document=LOG_FILE_NAME,
-            caption=(
-                f"<b>❍ ʙᴏᴛ ʟᴏɢs</b>\n\n"
-                f"<blockquote>"
-                f"❍ ꜰɪʟᴇ  :  <code>{LOG_FILE_NAME}</code>\n"
-                f"❍ sɪᴢᴇ  :  <code>{size / 1024:.1f} KB</code>\n"
-                f"❍ ᴛɪᴍᴇ  :  <code>{datetime.now().strftime('%d-%b-%y %H:%M:%S')}</code>"
-                f"</blockquote>"
-            ),
-        )
-        await wait.delete()
-    except Exception as e:
-        await wait.edit_text(
-            f"<b>ꜰᴀɪʟᴇᴅ ᴛᴏ sᴇɴᴅ ʟᴏɢ ꜰɪʟᴇ.</b>\n\n"
-            f"<blockquote><code>{e}</code></blockquote>"
-        )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -153,9 +114,7 @@ async def logs_handler(client: Client, message: Message):
 async def broadcast_handler(client: Client, message: Message):
     if not message.reply_to_message:
         await message.reply_text(
-            "<b>ᴜsᴀɢᴇ</b>\n\n"
-            "<blockquote>ʀᴇᴘʟʏ ᴛᴏ ᴛʜᴇ ᴍᴇssᴀɢᴇ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ʙʀᴏᴀᴅᴄᴀsᴛ, "
-            "ᴛʜᴇɴ sᴇɴᴅ <code>/broadcast</code>.</blockquote>"
+            "<blockquote>❌ ʀᴇᴘʟʏ ᴛᴏ ᴛʜᴇ ᴍᴇssᴀɢᴇ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ʙʀᴏᴀᴅᴄᴀsᴛ, ᴛʜᴇɴ sᴇɴᴅ /broadcast.</blockquote>"
         )
         return
 
@@ -164,7 +123,7 @@ async def broadcast_handler(client: Client, message: Message):
     total        = len(user_ids)
 
     status_msg = await message.reply_text(
-        f"<blockquote>ʙʀᴏᴀᴅᴄᴀsᴛɪɴɢ ᴛᴏ <b>{total}</b> ᴜsᴇʀs...</blockquote>"
+        f"<blockquote>📡 ʙʀᴏᴀᴅᴄᴀsᴛɪɴɢ ᴛᴏ <b>{total}</b> ᴜsᴇʀs…</blockquote>"
     )
 
     sent = blocked = failed = 0
@@ -175,7 +134,7 @@ async def broadcast_handler(client: Client, message: Message):
             await to_broadcast.copy(uid)
             sent += 1
         except FloodWait as e:
-            await asyncio.sleep(e.value + 1)
+            await asyncio.sleep(e.value)
             try:
                 await to_broadcast.copy(uid)
                 sent += 1
@@ -189,25 +148,23 @@ async def broadcast_handler(client: Client, message: Message):
         if (sent + blocked + failed) % 50 == 0:
             try:
                 await status_msg.edit_text(
-                    f"<b>❍ ʙʀᴏᴀᴅᴄᴀsᴛ ɪɴ ᴘʀᴏɢʀᴇss...</b>\n\n"
-                    f"<blockquote>"
-                    f"❍ sᴇɴᴛ     :  {sent}\n"
-                    f"❍ ʙʟᴏᴄᴋᴇᴅ  :  {blocked}\n"
-                    f"❍ ꜰᴀɪʟᴇᴅ   :  {failed}"
-                    f"</blockquote>"
+                    "<blockquote>"
+                    f"📡 ᴘʀᴏɢʀᴇss:\n"
+                    f"✅ sᴇɴᴛ: <b>{sent}</b>  ❌ ꜰᴀɪʟᴇᴅ: <b>{failed}</b>  🚫 ʙʟᴏᴄᴋᴇᴅ: <b>{blocked}</b>"
+                    "</blockquote>"
                 )
             except Exception:
                 pass
 
     elapsed = (datetime.now() - start).seconds
     await status_msg.edit_text(
-        f"<b>❍ ʙʀᴏᴀᴅᴄᴀsᴛ ᴄᴏᴍᴘʟᴇᴛᴇ.</b>\n\n"
-        f"<blockquote>"
-        f"❍ sᴇɴᴛ     :  {sent}\n"
-        f"❍ ʙʟᴏᴄᴋᴇᴅ  :  {blocked}\n"
-        f"❍ ꜰᴀɪʟᴇᴅ   :  {failed}\n"
-        f"❍ ᴛɪᴍᴇ     :  {elapsed}s"
-        f"</blockquote>"
+        "<b>✅ ʙʀᴏᴀᴅᴄᴀsᴛ ᴄᴏᴍᴘʟᴇᴛᴇ!</b>\n\n"
+        "<blockquote>"
+        f"❍ sᴇɴᴛ    : <b>{sent}</b>\n"
+        f"❍ ʙʟᴏᴄᴋᴇᴅ : <b>{blocked}</b>\n"
+        f"❍ ꜰᴀɪʟᴇᴅ  : <b>{failed}</b>\n"
+        f"❍ ᴛɪᴍᴇ    : <b>{elapsed}s</b>"
+        "</blockquote>"
     )
 
 
@@ -219,7 +176,7 @@ async def broadcast_handler(client: Client, message: Message):
 async def cleanup_handler(client: Client, message: Message):
     user_ids   = await CosmicBotz.get_all_users()
     status_msg = await message.reply_text(
-        f"<blockquote>ᴄʜᴇᴄᴋɪɴɢ <b>{len(user_ids)}</b> ᴜsᴇʀs...</blockquote>"
+        f"<blockquote>🧹 ᴄʜᴇᴄᴋɪɴɢ <b>{len(user_ids)}</b> ᴜsᴇʀs ꜰᴏʀ ʙʟᴏᴄᴋs / ᴅᴇᴀᴄᴛɪᴠᴀᴛɪᴏɴs…</blockquote>"
     )
     removed = 0
     for uid in user_ids:
@@ -231,27 +188,44 @@ async def cleanup_handler(client: Client, message: Message):
         except Exception:
             pass
 
-    remaining = await CosmicBotz.total_users()
     await status_msg.edit_text(
-        f"<b>❍ ᴄʟᴇᴀɴᴜᴘ ᴅᴏɴᴇ.</b>\n\n"
-        f"<blockquote>"
-        f"❍ ʀᴇᴍᴏᴠᴇᴅ    :  {removed}\n"
-        f"❍ ʀᴇᴍᴀɪɴɪɴɢ  :  {remaining}"
-        f"</blockquote>"
+        "<b>✅ ᴄʟᴇᴀɴᴜᴘ ᴅᴏɴᴇ!</b>\n\n"
+        "<blockquote>"
+        f"❍ ʀᴇᴍᴏᴠᴇᴅ   : <b>{removed}</b>\n"
+        f"❍ ʀᴇᴍᴀɪɴɪɴɢ : <b>{await CosmicBotz.total_users()}</b>"
+        "</blockquote>"
     )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Uptime formatter
+#  /logs  (owner only) — send bot.log as a document
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _fmt_uptime(start: datetime) -> str:
+@Client.on_message(filters.command("logs") & filters.private & owner_filter)
+async def logs_handler(client: Client, message: Message):
+    log_file = "bot.log"
+    if not os.path.exists(log_file) or os.path.getsize(log_file) == 0:
+        await message.reply_text(
+            "<blockquote>📭 ʟᴏɢ ꜰɪʟᴇ ɪs ᴇᴍᴘᴛʏ ᴏʀ ᴅᴏᴇs ɴᴏᴛ ᴇxɪsᴛ.</blockquote>"
+        )
+        return
+    await message.reply_document(
+        document=log_file,
+        caption="<blockquote>📜 ʜᴇʀᴇ ɪs ᴛʜᴇ ʟᴀᴛᴇsᴛ ʙᴏᴛ ʟᴏɢ.</blockquote>",
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Internal helper
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _format_uptime(start: datetime) -> str:
     delta = datetime.now() - start
     h, rem = divmod(int(delta.total_seconds()), 3600)
     m, s   = divmod(rem, 60)
     d, h   = divmod(h, 24)
     parts  = []
-    if d: parts.append(f"{d}ᴅ")
-    if h: parts.append(f"{h}ʜ")
-    parts.append(f"{m}ᴍ {s}s")
+    if d: parts.append(f"{d}d")
+    if h: parts.append(f"{h}h")
+    parts.append(f"{m}m {s}s")
     return " ".join(parts)
