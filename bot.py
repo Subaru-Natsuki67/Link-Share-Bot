@@ -1,10 +1,3 @@
-"""
-bot.py
-~~~~~~
-PyroFork Bot client.  All imports use the `pyrogram` namespace
-(PyroFork is a drop-in fork; it installs as `pyrofork` but exposes
-exactly the same `pyrogram.*` package).
-"""
 import asyncio
 from datetime import datetime
 
@@ -41,7 +34,6 @@ class Bot(Client):
             plugins={"root": "plugins"},
             workers=TG_BOT_WORKERS,
             bot_token=TG_BOT_TOKEN,
-            parse_mode=ParseMode.HTML,
         )
 
     # ------------------------------------------------------------------
@@ -49,19 +41,23 @@ class Bot(Client):
     # ------------------------------------------------------------------
 
     async def start(self):
-        # Initialise DB connection first
+        # Install global error handler BEFORE connecting so every handler is covered
+        from plugins.errors import install_global_error_handler
+        install_global_error_handler(self)
+
+        # Initialise DB connection
         CosmicBotz.connect()
 
         await super().start()
 
         me = await self.get_me()
-        self.uptime = datetime.now()
+        self.uptime   = datetime.now()
         self.username = me.username
-        
+        await self.set_parse_mode(ParseMode.HTML)
 
         logger.info("Bot @%s is running! [workers=%s]", me.username, TG_BOT_WORKERS)
 
-        # Lightweight health-check web server (keeps Heroku/Koyeb dyno awake)
+        # Lightweight health-check web server (keeps Render/Koyeb dyno awake)
         runner = web.AppRunner(await web_server())
         await runner.setup()
         await web.TCPSite(runner, "0.0.0.0", PORT).start()
