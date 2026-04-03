@@ -19,12 +19,23 @@ from config import FORCE_SUB_CHANNEL, LINK_EXPIRY_SECONDS, LOGGER
 
 logger = LOGGER(__name__)
 
-# Token prefix that flags a request-join deep-link
 REQ_PREFIX = "req_"
+
+# ── Bot username cache (set once at startup, never expires) ───────────────────
+_BOT_USERNAME: str = ""
+
+def set_bot_username(username: str) -> None:
+    """Call this once from bot.py after super().start() to cache the username."""
+    global _BOT_USERNAME
+    _BOT_USERNAME = username
+    logger.info("Bot username cached: @%s", username)
+
+def get_bot_username() -> str:
+    return _BOT_USERNAME
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Low-level base64
+#  Base64 helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def encode(string: str) -> str:
@@ -43,25 +54,17 @@ async def decode(b64_string: str) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def encode_channel_id(channel_id: int) -> str:
-    """Normal deep-link token: base64url(str(channel_id))."""
     return await encode(str(channel_id))
 
 
 async def encode_req_channel_id(channel_id: int) -> str:
-    """Request deep-link token: req_ + base64url(str(channel_id))."""
     return f"{REQ_PREFIX}{await encode(str(channel_id))}"
 
 
 async def decode_channel_token(token: str) -> tuple[Optional[int], bool]:
     """
     Decode any deep-link token → (channel_id, is_request_link).
-
-    Handles:
-      req_<b64>   → request-join flow  (is_request_link=True)
-      <b64>       → normal invite flow (is_request_link=False)
-      Legacy "channel_<id>" prefix (older forks)
-
-    Returns (None, False) on any failure.
+    Returns (None, False) on failure.
     """
     try:
         is_req  = token.startswith(REQ_PREFIX)
@@ -82,23 +85,32 @@ async def decode_channel_token(token: str) -> tuple[Optional[int], bool]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Build both deep-link URLs  (username fetched live — never stored in DB)
+#  Build deep-link URLs  — uses CACHED username, zero API calls
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def build_links(client: Client, channel_id: int) -> tuple[str, str]:
     """
     Return (normal_deep_link, request_deep_link).
 
-    Both use the bot's live username from Telegram — renaming the bot
-    never breaks existing tokens because the token only encodes channel_id.
+    Uses the cached bot username set at startup — no get_me() call,
+    no FloodWait risk even in tight loops over many channels.
+
+    Falls back to a live get_me() ONLY if cache is somehow empty
+    (should never happen after bot.py sets it correctly).
     """
-    me = await client.get_me()
-    bot_username = me.username
+    username = _BOT_USERNAME
+    if not username:
+        # Safety fallback — only happens if set_bot_username() was not called
+        logger.warning("Bot username cache empty — falling back to get_me(). "
+                       "Ensure set_bot_username() is called in bot.py start().")
+        me = await client.get_me()
+        username = me.username
+
     normal_token = await encode_channel_id(channel_id)
     req_token    = await encode_req_channel_id(channel_id)
     return (
-        f"https://t.me/{bot_username}?start={normal_token}",
-        f"https://t.me/{bot_username}?start={req_token}",
+        f"https://t.me/{username}?start={normal_token}",
+        f"https://t.me/{username}?start={req_token}",
     )
 
 
@@ -108,9 +120,8 @@ async def build_links(client: Client, channel_id: int) -> tuple[str, str]:
 
 async def get_invite_link(client: Client, channel_id: int) -> Optional[str]:
     """
-    Generate a temporary, single-use invite link.
-    - Expires in LINK_EXPIRY_SECONDS (default 5 min).
-    - member_limit=1 → auto-revokes after one use.
+    Temp single-use invite link.
+    Expires in LINK_EXPIRY_SECONDS. member_limit=1 auto-revokes after one use.
     """
     expire_at = datetime.now(timezone.utc) + timedelta(seconds=LINK_EXPIRY_SECONDS)
     try:
@@ -121,11 +132,9 @@ async def get_invite_link(client: Client, channel_id: int) -> Optional[str]:
         )
         return link.invite_link
     except ChatAdminRequired:
-        logger.error(
-            "Bot lacks invite-link admin rights in channel %s.", channel_id
-        )
+        logger.error("Bot lacks invite-link admin rights in channel %s.", channel_id)
     except FloodWait as e:
-        logger.warning("FloodWait %ss — waiting before retry for channel %s.", e.value, channel_id)
+        logger.warning("FloodWait %ss — retrying invite link for %s.", e.value, channel_id)
         await asyncio.sleep(e.value + 1)
         return await get_invite_link(client, channel_id)
     except Exception as e:
@@ -135,32 +144,22 @@ async def get_invite_link(client: Client, channel_id: int) -> Optional[str]:
 
 async def get_request_invite_link(client: Client, channel_id: int) -> Optional[str]:
     """
-    Generate a temporary request-join link.
-
-    The link creates_join_request=True, meaning the user taps it to
-    *send a join request* which the channel admin approves/denies.
-
-    We still set an expiry (LINK_EXPIRY_SECONDS) so the link can't be
-    scraped and reused indefinitely — but it has NO member_limit so every
-    user who taps the deep-link before expiry can send their request.
-
-    Note: a new fresh link is generated on every deep-link click, so
-    users always get a valid URL.
+    Temp request-join link (creates_join_request=True).
+    Expires in LINK_EXPIRY_SECONDS so it can't be scraped indefinitely.
+    A new link is generated on every deep-link click — users always get a valid URL.
     """
     expire_at = datetime.now(timezone.utc) + timedelta(seconds=LINK_EXPIRY_SECONDS)
     try:
         link: ChatInviteLink = await client.create_chat_invite_link(
             chat_id=channel_id,
-            expire_date=expire_at,          # temp — not permanent
-            creates_join_request=True,      # sends join request, not direct join
+            expire_date=expire_at,
+            creates_join_request=True,
         )
         return link.invite_link
     except ChatAdminRequired:
-        logger.error(
-            "Bot lacks admin rights in channel %s for request link.", channel_id
-        )
+        logger.error("Bot lacks admin rights in channel %s for request link.", channel_id)
     except FloodWait as e:
-        logger.warning("FloodWait %ss — waiting before retry for channel %s.", e.value, channel_id)
+        logger.warning("FloodWait %ss — retrying request link for %s.", e.value, channel_id)
         await asyncio.sleep(e.value + 1)
         return await get_request_invite_link(client, channel_id)
     except Exception as e:
@@ -189,23 +188,21 @@ async def is_subscribed(client: Client, user_id: int) -> bool:
         await asyncio.sleep(e.value + 1)
         return await is_subscribed(client, user_id)
     except Exception:
-        return True   # fail-open — don't lock users out on Telegram glitches
+        return True  # fail-open
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Safe message helpers  (never crash on stale messages)
+#  Safe message helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def safe_delete(message: Message) -> None:
-    """Delete a message, silently ignoring errors (already deleted, no permission, etc.)."""
     try:
         await message.delete()
-    except (MessageDeleteForbidden, MessageIdInvalid, Exception):
+    except Exception:
         pass
 
 
 async def safe_edit(message: Message, text: str, **kwargs) -> None:
-    """Edit a message, silently ignoring MessageNotModified and similar."""
     try:
         await message.edit_text(text, **kwargs)
     except MessageNotModified:
@@ -227,18 +224,6 @@ def paginate_keyboard(
     per_page: int = 5,
     prefix: str = "page",
 ) -> tuple[list, int, int]:
-    """
-    Build paginated keyboard rows.
-
-    Args:
-        items    : list of (button_label, callback_data)
-        page     : current 0-indexed page
-        per_page : items per page
-        prefix   : callback_data prefix for nav buttons
-
-    Returns:
-        (keyboard_rows, current_page, total_pages)
-    """
     total       = len(items)
     total_pages = max(1, math.ceil(total / per_page))
     page        = max(0, min(page, total_pages - 1))
@@ -248,9 +233,9 @@ def paginate_keyboard(
 
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton("« Prev", callback_data=f"{prefix}:{page - 1}"))
+        nav.append(InlineKeyboardButton("« ᴘʀᴇᴠ", callback_data=f"{prefix}:{page - 1}"))
     if page < total_pages - 1:
-        nav.append(InlineKeyboardButton("Next »", callback_data=f"{prefix}:{page + 1}"))
+        nav.append(InlineKeyboardButton("ɴᴇxᴛ »", callback_data=f"{prefix}:{page + 1}"))
     if nav:
         rows.append(nav)
 
