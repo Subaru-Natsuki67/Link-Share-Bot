@@ -77,14 +77,21 @@ LINK_EXPIRY_SECONDS: int = int(_env("LINK_EXPIRY_SECONDS", default=300))
 
 # ──────────────────────────────────────────────
 #  Start picture(s)
-#  Set START_PIC_IDS to one or more Telegram file_ids separated by spaces.
-#  One is picked at random on every /start.  Leave empty = text-only start.
+#  Comma-separated image URLs.  Can be Telegraph links, CDN links, etc.
+#  One URL is picked at random on every /start.
 #
-#  How to get a file_id:
-#    Forward any photo to your bot, then read the file_id from the logs.
+#  Example in your .env / Render env var:
+#    START_PICS=https://telegra.ph/file/abc.jpg,https://telegra.ph/file/def.jpg
+#
+#  Leave empty → text-only /start.
 # ──────────────────────────────────────────────
-_raw_pics = _env("START_PIC_IDS", default="").strip()
-START_PIC_IDS: list[str] = [p for p in _raw_pics.split() if p]
+_raw_pics = _env("START_PICS", default="").strip()
+# Split by comma, strip whitespace/quotes from each entry, drop empties
+START_PICS: list[str] = [
+    p.strip().strip('"').strip("'")
+    for p in _raw_pics.split(",")
+    if p.strip().strip('"').strip("'")
+]
 
 # ──────────────────────────────────────────────
 #  Custom bot texts  (HTML is fully supported)
