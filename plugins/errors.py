@@ -1,16 +1,3 @@
-"""
-plugins/errors.py
-~~~~~~~~~~~~~~~~~
-Global error / exception handler.
-
-Catches unhandled exceptions in ALL handlers and:
-  • Logs them with full traceback.
-  • Handles FloodWait by sleeping and NOT crashing.
-  • Suppresses known non-critical Telegram API errors silently.
-  • Notifies the owner on unexpected critical errors (optional).
-
-The bot will NEVER stop due to a handler exception.
-"""
 import asyncio
 import traceback
 
@@ -30,99 +17,167 @@ from config import LOGGER, OWNER_ID
 
 logger = LOGGER(__name__)
 
-# ── Non-critical errors we silently swallow ───────────────────────────────────
-_SILENT_ERRORS = (
-    MessageNotModified,     # editing a message with the same text
-    MessageIdInvalid,       # message was deleted before we could act
-    MessageDeleteForbidden, # can't delete in this context
-    QueryIdInvalid,         # callback query expired (>10 min old)
-    UserIsBlocked,          # user blocked the bot
-    InputUserDeactivated,   # user deleted their account
-    PeerIdInvalid,          # bad peer (stale chat reference)
+# ── Errors we swallow silently (expected, non-critical) ──────────────────────
+_SILENT = (
+    MessageNotModified,
+    MessageIdInvalid,
+    MessageDeleteForbidden,
+    QueryIdInvalid,
+    UserIsBlocked,
+    InputUserDeactivated,
+    PeerIdInvalid,
 )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Disconnect hook — Pyrogram will auto-reconnect, just log it
+#  Central error handler — called whenever we catch something unexpected
+# ──────────────────────────────────────────────────────────────────────────────
+
+async def _on_error(client: Client, exc: Exception) -> None:
+    if isinstance(exc, FloodWait):
+        logger.warning("ꜰʟᴏᴏᴅᴡᴀɪᴛ %ss — sleeping.", exc.value)
+        await asyncio.sleep(exc.value + 1)
+        return
+
+    if isinstance(exc, _SILENT):
+        logger.debug("Suppressed: %s — %s", type(exc).__name__, exc)
+        return
+
+    tb = traceback.format_exc()
+    logger.error("Unhandled exception:\n%s", tb)
+
+    try:
+        await client.send_message(
+            OWNER_ID,
+            f"<b>ᴜɴʜᴀɴᴅʟᴇᴅ ᴇʀʀᴏʀ</b>\n\n"
+            f"<blockquote><code>{type(exc).__name__}: {str(exc)[:300]}</code></blockquote>\n\n"
+            f"<i>ꜰᴜʟʟ ᴛʀᴀᴄᴇʙᴀᴄᴋ ɪɴ ʟᴏɢs. ʙᴏᴛ ɪs sᴛɪʟʟ ʀᴜɴɴɪɴɢ.</i>",
+        )
+    except Exception:
+        pass
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Safe handler wrapper — wraps a single handler coroutine
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _make_safe(client: Client, coro_func):
+    """
+    Return a wrapped version of an async handler function that catches
+    all exceptions and routes them through _on_error.
+    """
+    async def wrapper(*args, **kwargs):
+        try:
+            return await coro_func(*args, **kwargs)
+        except FloodWait as e:
+            logger.warning("ꜰʟᴏᴏᴅᴡᴀɪᴛ %ss in handler %s.", e.value, coro_func.__name__)
+            await asyncio.sleep(e.value + 1)
+        except _SILENT as e:
+            logger.debug("Suppressed in handler %s: %s", coro_func.__name__, e)
+        except Exception as e:
+            await _on_error(client, e)
+    wrapper.__name__ = coro_func.__name__
+    return wrapper
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  install_global_error_handler
+#  Called once from bot.py AFTER super().__init__() and BEFORE super().start()
+# ──────────────────────────────────────────────────────────────────────────────
+
+def install_global_error_handler(client: Client) -> None:
+    """
+    Patch the correct internal method so every handler is wrapped in
+    try/except without touching each plugin individually.
+
+    Tries three different hook points in order (PyroFork may expose any of them):
+      1. client.dispatcher.update_workers  — task-level wrap (cleanest)
+      2. Pyrogram internal _run_handler     — per-handler wrap
+      3. Manual wrap of all registered handlers via client.dispatcher.groups
+    """
+    installed = False
+
+    # ── Strategy 1: patch Dispatcher._process_update ─────────────────────────
+    try:
+        dispatcher = client.dispatcher
+        original_process = dispatcher.__class__._process_update
+
+        async def safe_process_update(self, client_, update, users, chats):
+            try:
+                return await original_process(self, client_, update, users, chats)
+            except FloodWait as e:
+                logger.warning("ꜰʟᴏᴏᴅᴡᴀɪᴛ %ss in _process_update.", e.value)
+                await asyncio.sleep(e.value + 1)
+            except _SILENT as e:
+                logger.debug("Suppressed in _process_update: %s", e)
+            except Exception as e:
+                await _on_error(client_, e)
+
+        dispatcher.__class__._process_update = safe_process_update
+        logger.info("ɢʟᴏʙᴀʟ ᴇʀʀᴏʀ ʜᴀɴᴅʟᴇʀ installed via Dispatcher._process_update.")
+        installed = True
+    except AttributeError:
+        pass
+
+    if installed:
+        return
+
+    # ── Strategy 2: patch Dispatcher.process_update (older naming) ───────────
+    try:
+        dispatcher = client.dispatcher
+        original_process = dispatcher.__class__.process_update
+
+        async def safe_process_update_v2(self, client_, update, users, chats):
+            try:
+                return await original_process(self, client_, update, users, chats)
+            except FloodWait as e:
+                await asyncio.sleep(e.value + 1)
+            except _SILENT as e:
+                logger.debug("Suppressed: %s", e)
+            except Exception as e:
+                await _on_error(client_, e)
+
+        dispatcher.__class__.process_update = safe_process_update_v2
+        logger.info("ɢʟᴏʙᴀʟ ᴇʀʀᴏʀ ʜᴀɴᴅʟᴇʀ installed via Dispatcher.process_update.")
+        installed = True
+    except AttributeError:
+        pass
+
+    if installed:
+        return
+
+    # ── Strategy 3: wrap client.invoke for RPC-level FloodWait ───────────────
+    try:
+        original_invoke = client.__class__.invoke
+
+        async def safe_invoke(self, query, retries=5, timeout=15, sleep_threshold=None):
+            try:
+                return await original_invoke(self, query, retries, timeout, sleep_threshold)
+            except FloodWait as e:
+                logger.warning("ꜰʟᴏᴏᴅᴡᴀɪᴛ %ss on invoke.", e.value)
+                await asyncio.sleep(e.value + 1)
+                return await safe_invoke(self, query, retries, timeout, sleep_threshold)
+            except Exception:
+                raise  # let handlers deal with the rest
+
+        client.__class__.invoke = safe_invoke
+        logger.info("ꜰʟᴏᴏᴅᴡᴀɪᴛ guard installed via Client.invoke (partial protection).")
+        installed = True
+    except AttributeError:
+        pass
+
+    if not installed:
+        logger.warning(
+            "ɢʟᴏʙᴀʟ ᴇʀʀᴏʀ ʜᴀɴᴅʟᴇʀ: could not find a suitable hook point in this "
+            "PyroFork/Pyrogram version. Handlers are NOT globally wrapped. "
+            "Each plugin uses its own try/except instead."
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Disconnect hook
 # ──────────────────────────────────────────────────────────────────────────────
 
 @Client.on_disconnect()
 async def on_disconnect(client: Client):
-    logger.warning("Bot disconnected — Pyrogram will auto-reconnect.")
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-#  Central error handler
-#  Pyrogram calls this for every exception raised inside a handler.
-# ──────────────────────────────────────────────────────────────────────────────
-
-async def handle_error(client: Client, exc: Exception) -> None:
-    """
-    Called by the global error middleware wrapper.
-    Do NOT re-raise — returning normally suppresses the error.
-    """
-    # FloodWait: sleep and let the next message retry naturally
-    if isinstance(exc, FloodWait):
-        wait = exc.value + 1
-        logger.warning("FloodWait received — sleeping %ss.", wait)
-        await asyncio.sleep(wait)
-        return
-
-    # Silent / expected non-critical errors
-    if isinstance(exc, _SILENT_ERRORS):
-        logger.debug("Suppressed non-critical error: %s — %s", type(exc).__name__, exc)
-        return
-
-    # Anything else: log the full traceback
-    tb = traceback.format_exc()
-    logger.error("Unhandled exception in handler:\n%s", tb)
-
-    # Optionally notify the owner (comment out if too noisy)
-    try:
-        short = str(exc)[:300]
-        await client.send_message(
-            OWNER_ID,
-            f"⚠️ <b>Unhandled Bot Error</b>\n\n"
-            f"<code>{type(exc).__name__}: {short}</code>\n\n"
-            f"<i>Full traceback in logs. Bot is still running.</i>",
-        )
-    except Exception:
-        pass  # Don't let the error notifier crash the error handler
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-#  Decorator-based wrapper  (applied automatically to all handlers via monkey-patch)
-#  This wraps every Pyrogram handler so no uncaught exception can kill the bot.
-# ──────────────────────────────────────────────────────────────────────────────
-
-_original_dispatch = None
-
-
-def install_global_error_handler(client: Client) -> None:
-    """
-    Monkey-patch Client.dispatch to wrap every handler call in try/except.
-    Call this once after the client is created (e.g. in bot.py after super().__init__).
-
-    This ensures ALL plugins are covered without modifying each one individually.
-    """
-    global _original_dispatch
-
-    if _original_dispatch is not None:
-        return  # Already installed
-
-    _original_dispatch = client.__class__.dispatch
-
-    async def safe_dispatch(self, update, *args, **kwargs):
-        try:
-            return await _original_dispatch(self, update, *args, **kwargs)
-        except FloodWait as e:
-            wait = e.value + 1
-            logger.warning("FloodWait %ss caught in dispatch — sleeping.", wait)
-            await asyncio.sleep(wait)
-        except _SILENT_ERRORS as e:
-            logger.debug("Silent error in dispatch: %s", e)
-        except Exception as e:
-            await handle_error(self, e)
-
-    client.__class__.dispatch = safe_dispatch
-    logger.info("Global error handler installed on %s.", client.__class__.__name__)
+    logger.warning("ʙᴏᴛ ᴅɪsᴄᴏɴɴᴇᴄᴛᴇᴅ — Pyrogram will auto-reconnect.")
