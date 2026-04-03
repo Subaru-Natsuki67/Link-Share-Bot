@@ -35,12 +35,8 @@ class Bot(Client):
             plugins={"root": "plugins"},
             workers=TG_BOT_WORKERS,
             bot_token=TG_BOT_TOKEN,
-            parse_mode=ParseMode.HTML,          # ← Fixed: set here (no await needed)
+            parse_mode=ParseMode.HTML,
         )
-
-    # ------------------------------------------------------------------
-    #  Lifecycle
-    # ------------------------------------------------------------------
 
     async def start(self):
         # Install global error handler BEFORE connecting
@@ -60,23 +56,23 @@ class Bot(Client):
 
         # ── AUTO BOT COMMANDS (Telegram menu) ─────────────────────────────
         await self.set_bot_commands([
-            BotCommand("start", "🚀 Start bot & get help"),
-            BotCommand("addch", "➕ Add a new channel"),
-            BotCommand("delch", "➖ Delete a channel"),
-            BotCommand("channels", "📋 List all added channels"),
-            BotCommand("stats", "📊 Bot statistics"),
-            BotCommand("status", "📈 Current bot status"),
-            BotCommand("broadcast", "📢 Broadcast message to all users"),
-            BotCommand("cleanup", "🧹 Cleanup old/expired links"),
-            BotCommand("users", "👥 List all bot users"),
-            BotCommand("logs", "📜 View recent logs"),
-            BotCommand("links", "🔗 Generate normal deep links"),
-            BotCommand("reqlink", "📩 Generate request-join links"),
-            BotCommand("bulklink", "📦 Bulk generate links"),
-            BotCommand("reqmode", "🔄 Toggle request mode"),
-            BotCommand("reqtime", "⏳ Set request link expiry time"),
-            BotCommand("approveon", "✅ Enable auto-approve join requests"),
-            BotCommand("approveoff", "❌ Disable auto-approve"),
+            BotCommand("start",      "🚀 Start bot & get help"),
+            BotCommand("addch",      "➕ Add a new channel"),
+            BotCommand("delch",      "➖ Delete a channel"),
+            BotCommand("channels",   "📋 List all added channels"),
+            BotCommand("stats",      "📊 Bot statistics"),
+            BotCommand("status",     "📈 Current bot status"),
+            BotCommand("broadcast",  "📢 Broadcast message to all users"),
+            BotCommand("cleanup",    "🧹 Cleanup blocked users"),
+            BotCommand("users",      "👥 Total user count"),
+            BotCommand("logs",       "📜 Download log file"),
+            BotCommand("links",      "🔗 Generate normal deep links"),
+            BotCommand("reqlink",    "📩 Generate request-join links"),
+            BotCommand("bulklink",   "📦 Bulk generate links"),
+            BotCommand("reqmode",    "🔄 Toggle request mode for a channel"),
+            BotCommand("reqtime",    "⏳ Set auto-approve delay for a channel"),
+            BotCommand("approveon",  "✅ Enable auto-approve for ALL channels"),
+            BotCommand("approveoff", "❌ Disable auto-approve for ALL channels"),
         ])
 
         # Lightweight health-check web server
