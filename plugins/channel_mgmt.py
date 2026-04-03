@@ -1,4 +1,5 @@
 import asyncio
+from typing import Union
 
 from pyrogram import Client, filters
 from pyrogram.errors import FloodWait, MessageNotModified, QueryIdInvalid
@@ -125,18 +126,9 @@ async def list_channels(client: Client, message: Message):
 
 
 async def _send_channels_page(client, target, channels: list[dict], page: int):
-    """
-    Render paginated channel list.
-    target can be a Message (reply) or CallbackQuery (edit).
-    Fixes the name-not-showing bug: we use ch["name"] directly from the DB doc.
-    """
-    # Build items as (label, callback_data) using the stored name
     items = []
     for ch in channels:
         ch_id   = ch["_id"]
-        # ← BUG FIX: was using ch.get("name") or str(ch_id) but the dict key
-        #   from Motor always returns the stored string — ensure we always have
-        #   a non-empty label here.
         ch_name = (ch.get("name") or "").strip() or f"Channel {ch_id}"
         items.append((f"📢 {ch_name}", f"chinfo:{ch_id}"))
 
@@ -240,7 +232,6 @@ async def toggle_req_cb(client: Client, cq: CallbackQuery):
         await cq.answer(f"Auto-Approve is now {label}", show_alert=True)
     except QueryIdInvalid:
         pass
-    # Refresh the info panel
     await channel_info_cb(client, cq)
 
 
@@ -264,7 +255,76 @@ async def remove_channel_cb(client: Client, cq: CallbackQuery):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  /links  — normal deep-links
+#  Paginated Links Helper (/links & /reqlinks)
+# ──────────────────────────────────────────────────────────────────────────────
+
+async def _send_links_page(
+    client: Client, 
+    target: Union[Message, CallbackQuery], 
+    channels: list[dict], 
+    page: int, 
+    link_type: str
+):
+    per_page = 10
+    total_pages = (len(channels) + per_page - 1) // per_page 
+    page = max(0, min(page, total_pages - 1))
+
+    chunk = channels[page * per_page : page * per_page + per_page]
+
+    title = "Normal Deep-Links" if link_type == "normal" else "Request Deep-Links"
+    lines = [f"<b>📋 {title}</b>  [{page + 1}/{total_pages}]\n"]
+
+    for ch in chunk:
+        ch_id   = ch["_id"]
+        ch_name = (ch.get("name") or "").strip() or f"Channel {ch_id}"
+        normal_link, req_link = await build_links(client, ch_id)
+        
+        link_to_show = normal_link if link_type == "normal" else req_link
+        lines.append(f"• <b>{ch_name}</b>  (<code>{ch_id}</code>)\n  <code>{link_to_show}</code>")
+
+    text = "\n\n".join(lines)
+
+    nav = []
+    prefix = f"linkspage:{link_type}"
+    if page > 0:
+        nav.append(InlineKeyboardButton("« Prev", callback_data=f"{prefix}:{page - 1}"))
+    if page < total_pages - 1:
+        nav.append(InlineKeyboardButton("Next »", callback_data=f"{prefix}:{page + 1}"))
+
+    kb = InlineKeyboardMarkup([nav]) if nav else None
+
+    if isinstance(target, Message):
+        await target.reply_text(text, reply_markup=kb, disable_web_page_preview=True)
+    else:
+        try:
+            await target.edit_message_text(text, reply_markup=kb, disable_web_page_preview=True)
+        except (MessageNotModified, QueryIdInvalid):
+            pass
+
+
+@Client.on_callback_query(filters.regex(r"^linkspage:(normal|req):(\d+)$") & admin_filter)
+async def links_page_cb(client: Client, cq: CallbackQuery):
+    link_type = cq.matches[0].group(1)
+    page      = int(cq.matches[0].group(2))
+    
+    channels = await CosmicBotz.get_all_channels()
+    if not channels:
+        try:
+            await cq.answer("No channels found.", show_alert=True)
+        except QueryIdInvalid:
+            pass
+        return
+
+    try:
+        await cq.answer()
+    except QueryIdInvalid:
+        pass
+
+    await _send_links_page(client, cq, channels, page, link_type)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  /links  — paginated normal deep-links
 # ──────────────────────────────────────────────────────────────────────────────
 
 @Client.on_message(filters.command("links") & filters.private & admin_filter)
@@ -274,20 +334,11 @@ async def list_links(client: Client, message: Message):
         await message.reply_text("📭 No channels registered.")
         return
 
-    wait  = await message.reply_text("⏳ Building links…")
-    lines = ["<b>📋 Normal Deep-Links:</b>\n"]
-    for ch in channels:
-        ch_id   = ch["_id"]
-        ch_name = (ch.get("name") or "").strip() or f"Channel {ch_id}"
-        normal_link, _ = await build_links(client, ch_id)
-        lines.append(f"• <b>{ch_name}</b>  (<code>{ch_id}</code>)\n  <code>{normal_link}</code>")
-
-    await safe_delete(wait)
-    await _send_chunked(message, "\n\n".join(lines))
+    await _send_links_page(client, message, channels, page=0, link_type="normal")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  /reqlink  — request deep-links
+#  /reqlink  — paginated request deep-links
 # ──────────────────────────────────────────────────────────────────────────────
 
 @Client.on_message(filters.command("reqlink") & filters.private & admin_filter)
@@ -297,16 +348,7 @@ async def req_links(client: Client, message: Message):
         await message.reply_text("📭 No channels registered.")
         return
 
-    wait  = await message.reply_text("⏳ Building request links…")
-    lines = ["<b>📋 Request Deep-Links:</b>\n"]
-    for ch in channels:
-        ch_id   = ch["_id"]
-        ch_name = (ch.get("name") or "").strip() or f"Channel {ch_id}"
-        _, req_link = await build_links(client, ch_id)
-        lines.append(f"• <b>{ch_name}</b>  (<code>{ch_id}</code>)\n  <code>{req_link}</code>")
-
-    await safe_delete(wait)
-    await _send_chunked(message, "\n\n".join(lines))
+    await _send_links_page(client, message, channels, page=0, link_type="req")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -346,26 +388,20 @@ async def bulk_link(client: Client, message: Message):
         )
 
     await safe_delete(wait)
-    await _send_chunked(message, "\n\n".join(lines))
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-#  Internal: split-send long text safely
-# ──────────────────────────────────────────────────────────────────────────────
-
-async def _send_chunked(message: Message, text: str, chunk_size: int = 3800):
-    if len(text) <= chunk_size:
+    
+    # Simple chunking just for bulklink output if needed
+    text = "\n\n".join(lines)
+    if len(text) <= 3800:
         await message.reply_text(text, disable_web_page_preview=True)
-        return
-
-    lines = text.split("\n\n")
-    buf: list[str] = []
-    for line in lines:
-        candidate = "\n\n".join(buf + [line])
-        if len(candidate) > chunk_size and buf:
+    else:
+        split_lines = text.split("\n\n")
+        buf = []
+        for line in split_lines:
+            candidate = "\n\n".join(buf + [line])
+            if len(candidate) > 3800 and buf:
+                await message.reply_text("\n\n".join(buf), disable_web_page_preview=True)
+                buf = [line]
+            else:
+                buf.append(line)
+        if buf:
             await message.reply_text("\n\n".join(buf), disable_web_page_preview=True)
-            buf = [line]
-        else:
-            buf.append(line)
-    if buf:
-        await message.reply_text("\n\n".join(buf), disable_web_page_preview=True)
