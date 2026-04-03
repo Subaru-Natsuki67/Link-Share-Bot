@@ -1,7 +1,3 @@
-"""
-PyroFork Bot client.
-All imports use the `pyrogram` namespace.
-"""
 import asyncio
 from datetime import datetime
 
