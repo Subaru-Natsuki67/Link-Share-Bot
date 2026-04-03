@@ -10,6 +10,7 @@ from pyrogram.types import BotCommand
 from config import (
     API_HASH,
     APP_ID,
+    LOG_FILE_NAME,
     LOGGER,
     PORT,
     TG_BOT_TOKEN,
@@ -49,33 +50,45 @@ class Bot(Client):
         await super().start()
 
         me = await self.get_me()
-        self.uptime = datetime.now()
+        self.uptime   = datetime.now()
         self.username = me.username
+
+        # ── Cache bot username to avoid get_me() calls in link-building loops ──
+        # This is the FIX for the FloodWait on invoke bug.
+        # build_links() reads from this cache — zero Telegram API calls per link.
+        from helper_func import set_bot_username
+        set_bot_username(me.username)
 
         logger.info("Bot @%s is running! [workers=%s]", me.username, TG_BOT_WORKERS)
 
-        # ── AUTO BOT COMMANDS (Telegram menu) ─────────────────────────────
-        await self.set_bot_commands([
-            BotCommand("start",      "🚀 Start bot & get help"),
-            BotCommand("addch",      "➕ Add a new channel"),
-            BotCommand("delch",      "➖ Delete a channel"),
-            BotCommand("channels",   "📋 List all added channels"),
-            BotCommand("stats",      "📊 Bot statistics"),
-            BotCommand("status",     "📈 Current bot status"),
-            BotCommand("broadcast",  "📢 Broadcast message to all users"),
-            BotCommand("cleanup",    "🧹 Cleanup blocked users"),
-            BotCommand("users",      "👥 Total user count"),
-            BotCommand("logs",       "📜 Download log file"),
-            BotCommand("links",      "🔗 Generate normal deep links"),
-            BotCommand("reqlink",    "📩 Generate request-join links"),
-            BotCommand("bulklink",   "📦 Bulk generate links"),
-            BotCommand("reqmode",    "🔄 Toggle request mode for a channel"),
-            BotCommand("reqtime",    "⏳ Set auto-approve delay for a channel"),
-            BotCommand("approveon",  "✅ Enable auto-approve for ALL channels"),
-            BotCommand("approveoff", "❌ Disable auto-approve for ALL channels"),
-        ])
+        # ── Set bot command menu ───────────────────────────────────────────────
+        try:
+            await self.set_bot_commands([
+                BotCommand("start",      "sᴛᴀʀᴛ ʙᴏᴛ & ɢᴇᴛ ʜᴇʟᴘ"),
+                BotCommand("help",       "ʜᴇʟᴘ & ᴄᴏᴍᴍᴀɴᴅ ʟɪsᴛ"),
+                BotCommand("about",      "ᴀʙᴏᴜᴛ ᴛʜɪs ʙᴏᴛ"),
+                BotCommand("addch",      "ʀᴇɢɪsᴛᴇʀ ᴀ ɴᴇᴡ ᴄʜᴀɴɴᴇʟ"),
+                BotCommand("delch",      "ʀᴇᴍᴏᴠᴇ ᴀ ᴄʜᴀɴɴᴇʟ"),
+                BotCommand("channels",   "ᴍᴀɴᴀɢᴇ ʀᴇɢɪsᴛᴇʀᴇᴅ ᴄʜᴀɴɴᴇʟs"),
+                BotCommand("links",      "ɴᴏʀᴍᴀʟ ᴅᴇᴇᴘ-ʟɪɴᴋs ꜰᴏʀ ᴀʟʟ ᴄʜᴀɴɴᴇʟs"),
+                BotCommand("reqlink",    "ʀᴇǫᴜᴇsᴛ ᴅᴇᴇᴘ-ʟɪɴᴋs ꜰᴏʀ ᴀʟʟ ᴄʜᴀɴɴᴇʟs"),
+                BotCommand("bulklink",   "ʙᴜʟᴋ ɢᴇɴᴇʀᴀᴛᴇ ʙᴏᴛʜ ʟɪɴᴋs"),
+                BotCommand("reqmode",    "ᴛᴏɢɢʟᴇ ᴀᴜᴛᴏ-ᴀᴘᴘʀᴏᴠᴇ ꜰᴏʀ ᴀ ᴄʜᴀɴɴᴇʟ"),
+                BotCommand("reqtime",    "sᴇᴛ ᴀᴜᴛᴏ-ᴀᴘᴘʀᴏᴠᴇ ᴅᴇʟᴀʏ"),
+                BotCommand("approveon",  "ᴇɴᴀʙʟᴇ ᴀᴜᴛᴏ-ᴀᴘᴘʀᴏᴠᴇ ꜰᴏʀ ᴀʟʟ ᴄʜᴀɴɴᴇʟs"),
+                BotCommand("approveoff", "ᴅɪsᴀʙʟᴇ ᴀᴜᴛᴏ-ᴀᴘᴘʀᴏᴠᴇ ꜰᴏʀ ᴀʟʟ ᴄʜᴀɴɴᴇʟs"),
+                BotCommand("stats",      "ʙᴏᴛ sᴛᴀᴛɪsᴛɪᴄs (ᴏᴡɴᴇʀ)"),
+                BotCommand("status",     "ʙᴏᴛ ᴏɴʟɪɴᴇ sᴛᴀᴛᴜs"),
+                BotCommand("broadcast",  "ʙʀᴏᴀᴅᴄᴀsᴛ ᴛᴏ ᴀʟʟ ᴜsᴇʀs"),
+                BotCommand("cleanup",    "ʀᴇᴍᴏᴠᴇ ʙʟᴏᴄᴋᴇᴅ ᴜsᴇʀs"),
+                BotCommand("users",      "ᴛᴏᴛᴀʟ ᴜsᴇʀ ᴄᴏᴜɴᴛ"),
+                BotCommand("logs",       "ᴅᴏᴡɴʟᴏᴀᴅ ʟᴏɢ ꜰɪʟᴇ (ᴏᴡɴᴇʀ)"),
+            ])
+            logger.info("Bot commands menu set.")
+        except Exception as e:
+            logger.warning("Failed to set bot commands: %s", e)
 
-        # Lightweight health-check web server
+        # ── Health-check web server ────────────────────────────────────────────
         runner = web.AppRunner(await web_server())
         await runner.setup()
         await web.TCPSite(runner, "0.0.0.0", PORT).start()
