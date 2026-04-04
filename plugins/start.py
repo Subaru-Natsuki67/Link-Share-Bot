@@ -1,3 +1,15 @@
+"""
+plugins/start.py
+~~~~~~~~~~~~~~~~
+Handles /start, /help, /about.
+
+Deep-link routing:
+  ?start=<b64>       — normal flow  — temp single-use invite link
+  ?start=req_<b64>   — request flow — temp request-join link
+
+All user-visible text uses small caps Unicode style.
+Blockquotes used for info sections.
+"""
 import asyncio
 import random
 
@@ -22,11 +34,13 @@ from config import (
 from database import CosmicBotz
 from helper_func import (
     decode_channel_token,
+    get_bot_username,
     get_invite_link,
     get_request_invite_link,
     is_subscribed,
     safe_delete,
 )
+from rate_limit import check_rate_limit, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW
 
 logger = LOGGER(__name__)
 
@@ -127,12 +141,13 @@ def _pick_pic() -> str | None:
 #  Keyboards  (button labels in small caps)
 # ──────────────────────────────────────────────────────────────────────────────
 
-async def _start_keyboard(client: Client) -> InlineKeyboardMarkup:
-    me = await client.get_me()
+def _start_keyboard() -> InlineKeyboardMarkup:
+    """Uses cached bot username — no API call."""
+    username = get_bot_username()
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("❍ ᴏᴡɴᴇʀ",          url=f"tg://user?id={OWNER_ID}"),
-            InlineKeyboardButton("➕ ᴀᴅᴅ ᴛᴏ ᴄʜᴀɴɴᴇʟ", url=f"https://t.me/{me.username}?startchannel=true"),
+            InlineKeyboardButton("➕ ᴀᴅᴅ ᴛᴏ ᴄʜᴀɴɴᴇʟ", url=f"https://t.me/{username}?startchannel=true"),
         ],
         [
             InlineKeyboardButton("❓ ʜᴇʟᴘ",  callback_data="cb_help"),
@@ -170,6 +185,17 @@ async def start_handler(client: Client, message: Message):
             await message.reply_text(
                 "<b>ɪɴᴠᴀʟɪᴅ ᴏʀ ᴇxᴘɪʀᴇᴅ ʟɪɴᴋ.</b>\n\n"
                 "<blockquote>ᴘʟᴇᴀsᴇ ᴛᴀᴘ ᴛʜᴇ ᴏʀɪɢɪɴᴀʟ ᴘᴏsᴛ ʟɪɴᴋ ᴀɢᴀɪɴ ᴛᴏ ɢᴇᴛ ᴀ ꜰʀᴇsʜ ᴏɴᴇ.</blockquote>"
+            )
+            return
+
+        # ── Rate limit check ──────────────────────────────────────────────────
+        allowed, wait_secs = check_rate_limit(user.id)
+        if not allowed:
+            await message.reply_text(
+                "<b>sʟᴏᴡ ᴅᴏᴡɴ!</b>\n\n"
+                f"<blockquote>ʏᴏᴜ ᴄᴀɴ ʀᴇǫᴜᴇsᴛ ᴜᴘ ᴛᴏ <b>{RATE_LIMIT_MAX}</b> ʟɪɴᴋs "
+                f"ᴇᴠᴇʀʏ <b>{RATE_LIMIT_WINDOW}s</b>.\n"
+                f"ᴘʟᴇᴀsᴇ ᴡᴀɪᴛ <b>{wait_secs}s</b> ʙᴇꜰᴏʀᴇ ᴛʀʏɪɴɢ ᴀɢᴀɪɴ.</blockquote>"
             )
             return
 
@@ -211,6 +237,9 @@ async def start_handler(client: Client, message: Message):
                 )
                 return
 
+            # ── Increment link counter ────────────────────────────────────────
+            await CosmicBotz.increment_link_count(channel_id)
+
             await message.reply_text(
                 f"ʜᴇʀᴇ ɪs ʏᴏᴜʀ ʟɪɴᴋ! ᴄʟɪᴄᴋ ʙᴇʟᴏᴡ ᴛᴏ ᴘʀᴏᴄᴇᴇᴅ\n\n"
                 f"<b>{ch_name}</b>\n\n"
@@ -234,6 +263,9 @@ async def start_handler(client: Client, message: Message):
             )
             return
 
+        # ── Increment link counter ────────────────────────────────────────────
+        await CosmicBotz.increment_link_count(channel_id)
+
         await message.reply_text(
             f"ʜᴇʀᴇ ɪs ʏᴏᴜʀ ʟɪɴᴋ! ᴄʟɪᴄᴋ ʙᴇʟᴏᴡ ᴛᴏ ᴘʀᴏᴄᴇᴇᴅ\n\n"
             f"<b>{ch_name}</b>\n\n"
@@ -249,7 +281,7 @@ async def start_handler(client: Client, message: Message):
     # ── Plain /start ──────────────────────────────────────────────────────────
     text     = _start_text(user.mention)
     pic      = _pick_pic()
-    keyboard = await _start_keyboard(client)
+    keyboard = _start_keyboard()
 
     if pic:
         try:
@@ -308,7 +340,7 @@ async def about_callback(client: Client, cq: CallbackQuery):
 @Client.on_callback_query(filters.regex(r"^cb_start$"))
 async def back_to_start_callback(client: Client, cq: CallbackQuery):
     text     = _start_text(cq.from_user.mention)
-    keyboard = await _start_keyboard(client)
+    keyboard = _start_keyboard()
     try:
         await cq.edit_message_text(
             text, reply_markup=keyboard, disable_web_page_preview=True
