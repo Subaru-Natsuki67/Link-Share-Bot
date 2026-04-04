@@ -17,7 +17,7 @@ touching anything else.
 """
 import asyncio
 
-from pyrogram import Client
+from pyrogram import Client, filters
 from pyrogram.enums import ChatMemberStatus
 from pyrogram.errors import QueryIdInvalid
 from pyrogram.types import (
@@ -26,11 +26,10 @@ from pyrogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
 )
-from pyrogram import filters
 
 from config import LOGGER, OWNER_ID
 from database import CosmicBotz
-from helper_func import build_links
+from helper_func import build_links   # kept for consistency (unused in this file)
 
 logger = LOGGER(__name__)
 
@@ -39,17 +38,22 @@ logger = LOGGER(__name__)
 _pending: dict[int, int] = {}
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-#  my_chat_member — fires when bot's status changes in any chat
-# ──────────────────────────────────────────────────────────────────────────────
-
-@Client.on_my_chat_member()
+@Client.on_chat_member_updated()
 async def on_bot_status_change(client: Client, update: ChatMemberUpdated):
+    """
+    Triggered when ANY member's status changes.
+    We only care when the BOT itself is kicked/demoted from a managed channel.
+    """
     new = update.new_chat_member
     old = update.old_chat_member
     chat = update.chat
 
     if new is None or old is None:
+        return
+
+    # This update must be about the bot itself
+    me = await client.get_me()
+    if new.user.id != me.id:
         return
 
     # Only care about channels the bot manages
@@ -60,7 +64,7 @@ async def on_bot_status_change(client: Client, update: ChatMemberUpdated):
     is_kicked = new.status in (ChatMemberStatus.BANNED, ChatMemberStatus.LEFT)
     is_member = new.status == ChatMemberStatus.MEMBER  # demoted to plain member
 
-    # ── Bot was promoted to admin (re-added or re-promoted) ──────────────────
+    # ── Bot was re-promoted to admin ─────────────────────────────────────
     if new.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER):
         ch_name = chat.title or str(chat.id)
         await CosmicBotz.update_channel_name(chat.id, ch_name)
@@ -79,16 +83,16 @@ async def on_bot_status_change(client: Client, update: ChatMemberUpdated):
                 pass
         return
 
-    # ── Bot was kicked or demoted — ask owner ────────────────────────────────
+    # ── Bot was kicked or demoted — ask owner ─────────────────────────────
     if not was_admin:
         return  # Was already not admin, nothing changed for us
 
     if not (is_kicked or is_member):
         return
 
-    ch_name  = chat.title or str(chat.id)
-    ch_id    = chat.id
-    reason   = "ᴋɪᴄᴋᴇᴅ / ʙᴀɴɴᴇᴅ" if is_kicked else "ᴅᴇᴍᴏᴛᴇᴅ ꜰʀᴏᴍ ᴀᴅᴍɪɴ"
+    ch_name = chat.title or str(chat.id)
+    ch_id   = chat.id
+    reason  = "ᴋɪᴄᴋᴇᴅ / ʙᴀɴɴᴇᴅ" if is_kicked else "ᴅᴇᴍᴏᴛᴇᴅ ꜰʀᴏᴍ ᴀᴅᴍɪɴ"
 
     logger.warning("Bot %s from channel %s (%s). Asking owner.", reason, ch_id, ch_name)
 
@@ -120,10 +124,6 @@ async def on_bot_status_change(client: Client, update: ChatMemberUpdated):
     except Exception as e:
         logger.error("Could not DM owner about channel removal: %s", e)
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-#  Callback: owner taps Confirm or Keep
-# ──────────────────────────────────────────────────────────────────────────────
 
 @Client.on_callback_query(
     filters.regex(r"^autoremove:(confirm|keep):(-?\d+)$") & filters.user([OWNER_ID])
