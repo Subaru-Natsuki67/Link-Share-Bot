@@ -1,15 +1,15 @@
 """
 plugins/req_mode.py
 ~~~~~~~~~~~~~~~~~~~
-Join-request auto-approval management.
+Commands for join-request auto-approval.
 
-  /reqmode <channel_id>   — Toggle auto-approve ON/OFF for a specific channel
-  /reqtime <ch_id> <sec>  — Set auto-approve timer for a specific channel
+  /reqmode  <channel_id>              — Toggle auto-approval ON/OFF (one channel)
+  /reqtime  [<channel_id>] <seconds>  — Set timer for one channel OR all channels
+                                        If channel_id is omitted → applies to ALL
+  /approveon                          — Enable auto-approve for ALL channels
+  /approveoff                         — Disable auto-approve for ALL channels
 
-  /approveon              — Enable  auto-approve GLOBALLY (all managed channels)
-  /approveoff             — Disable auto-approve GLOBALLY (all managed channels)
-
-  ChatJoinRequest handler — fires for every incoming join request
+Also handles ChatJoinRequest to auto-approve when mode is ON.
 """
 import asyncio
 
@@ -24,7 +24,7 @@ admin_filter = filters.user(ADMINS)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  /reqmode <channel_id>  — per-channel toggle
+#  /reqmode <channel_id>
 # ──────────────────────────────────────────────────────────────────────────────
 
 @Client.on_message(filters.command("reqmode") & filters.private & admin_filter)
@@ -32,7 +32,7 @@ async def req_mode_cmd(client: Client, message: Message):
     if len(message.command) < 2:
         await message.reply_text(
             "<b>ᴜsᴀɢᴇ:</b> <code>/reqmode &lt;channel_id&gt;</code>\n\n"
-            "<blockquote>ᴛᴏɢɢʟᴇs ᴀᴜᴛᴏ-ᴀᴘᴘʀᴏᴠᴀʟ ᴏꜰ ᴊᴏɪɴ ʀᴇǫᴜᴇsᴛs ᴏɴ/ᴏꜰꜰ ꜰᴏʀ ᴏɴᴇ ᴄʜᴀɴɴᴇʟ.\n"
+            "<blockquote>ᴛᴏɢɢʟᴇs ᴀᴜᴛᴏ-ᴀᴘᴘʀᴏᴠᴀʟ ᴏꜰ ᴊᴏɪɴ ʀᴇǫᴜᴇsᴛs ᴏɴ/ᴏꜰꜰ.\n"
             "ᴛᴏ ᴛᴏɢɢʟᴇ ᴀʟʟ ᴄʜᴀɴɴᴇʟs ᴀᴛ ᴏɴᴄᴇ ᴜsᴇ /approveon ᴏʀ /approveoff.</blockquote>"
         )
         return
@@ -41,13 +41,13 @@ async def req_mode_cmd(client: Client, message: Message):
         ch_id = int(message.command[1])
     except ValueError:
         await message.reply_text(
-            "<blockquote>❌ Channel ID must be an integer.</blockquote>"
+            "<blockquote>❌ ᴄʜᴀɴɴᴇʟ ɪᴅ ᴍᴜsᴛ ʙᴇ ᴀɴ ɪɴᴛᴇɢᴇʀ.</blockquote>"
         )
         return
 
     if not await CosmicBotz.is_channel_exist(ch_id):
         await message.reply_text(
-            "<blockquote>❌ Channel not registered. Use <code>/addch</code> first.</blockquote>"
+            "<blockquote>❌ ᴄʜᴀɴɴᴇʟ ɴᴏᴛ ʀᴇɢɪsᴛᴇʀᴇᴅ. ᴜsᴇ /addch ꜰɪʀsᴛ.</blockquote>"
         )
         return
 
@@ -55,57 +55,97 @@ async def req_mode_cmd(client: Client, message: Message):
     new_state = not current
     await CosmicBotz.set_req_mode(ch_id, new_state)
 
-    state_str = "✅ <b>ON</b>" if new_state else "❌ <b>OFF</b>"
+    state_str = "✅ <b>ᴏɴ</b>" if new_state else "❌ <b>ᴏꜰꜰ</b>"
     await message.reply_text(
-        f"<blockquote>🤖 Auto-approval for channel <code>{ch_id}</code> is now {state_str}.</blockquote>"
+        f"<blockquote>🤖 ᴀᴜᴛᴏ-ᴀᴘᴘʀᴏᴠᴀʟ ꜰᴏʀ <code>{ch_id}</code> ɪs ɴᴏᴡ {state_str}.</blockquote>"
     )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  /reqtime <channel_id> <seconds>  — per-channel timer
+#  /reqtime  [<channel_id>] <seconds>
+#  One arg  → apply to ALL channels (global default)
+#  Two args → apply to one specific channel
 # ──────────────────────────────────────────────────────────────────────────────
 
 @Client.on_message(filters.command("reqtime") & filters.private & admin_filter)
 async def req_time_cmd(client: Client, message: Message):
-    if len(message.command) < 3:
+    args = message.command[1:]   # strip "/reqtime"
+
+    if not args:
+        global_timer = await CosmicBotz.get_global_req_timer()
         await message.reply_text(
-            "<b>ᴜsᴀɢᴇ:</b> <code>/reqtime &lt;channel_id&gt; &lt;seconds&gt;</code>\n\n"
-            "<blockquote>sᴇᴛ ᴛᴏ <code>0</code> ᴛᴏ ᴀᴘᴘʀᴏᴠᴇ ɪᴍᴍᴇᴅɪᴀᴛᴇʟʏ.\n"
-            "ᴇxᴀᴍᴘʟᴇ: <code>/reqtime -1001234567890 30</code></blockquote>"
+            "<b>ᴜsᴀɢᴇ:</b>\n\n"
+            "<blockquote>"
+            "<code>/reqtime &lt;seconds&gt;</code>  — sᴇᴛ ꜰᴏʀ <b>ᴀʟʟ</b> ᴄʜᴀɴɴᴇʟs\n"
+            "<code>/reqtime &lt;channel_id&gt; &lt;seconds&gt;</code>  — sᴇᴛ ꜰᴏʀ ᴏɴᴇ ᴄʜᴀɴɴᴇʟ\n\n"
+            f"ᴄᴜʀʀᴇɴᴛ ɢʟᴏʙᴀʟ ᴅᴇꜰᴀᴜʟᴛ: <b>{global_timer}s</b> "
+            f"({'ɪᴍᴍᴇᴅɪᴀᴛᴇ' if global_timer == 0 else f'{global_timer}s ᴅᴇʟᴀʏ'})"
+            "</blockquote>"
         )
         return
 
-    try:
-        ch_id   = int(message.command[1])
-        seconds = int(message.command[2])
-        if seconds < 0:
-            raise ValueError
-    except ValueError:
+    # ── One argument: /reqtime <seconds> → global ─────────────────────────────
+    if len(args) == 1:
+        try:
+            seconds = int(args[0])
+            if seconds < 0:
+                raise ValueError
+        except ValueError:
+            await message.reply_text(
+                "<blockquote>❌ sᴇᴄᴏɴᴅs ᴍᴜsᴛ ʙᴇ ᴀ ɴᴏɴ-ɴᴇɢᴀᴛɪᴠᴇ ɪɴᴛᴇɢᴇʀ.</blockquote>"
+            )
+            return
+
+        channels = await CosmicBotz.get_all_channels()
+        await CosmicBotz.set_global_req_timer(seconds)
+
+        delay_str = "ɪᴍᴍᴇᴅɪᴀᴛᴇʟʏ" if seconds == 0 else f"ᴀꜰᴛᴇʀ <b>{seconds}s</b>"
         await message.reply_text(
-            "<blockquote>❌ Channel ID and seconds must be non-negative integers.</blockquote>"
+            f"<b>✅ ɢʟᴏʙᴀʟ ᴛɪᴍᴇʀ ᴜᴘᴅᴀᴛᴇᴅ.</b>\n\n"
+            f"<blockquote>"
+            f"❍ ᴀʟʟ <b>{len(channels)}</b> ᴄʜᴀɴɴᴇʟs ɴᴏᴡ ᴀᴘᴘʀᴏᴠᴇ ʀᴇǫᴜᴇsᴛs {delay_str}.\n"
+            f"❍ ɴᴇᴡ ᴄʜᴀɴɴᴇʟs ᴀᴅᴅᴇᴅ ʟᴀᴛᴇʀ ᴡɪʟʟ ᴀʟsᴏ ɪɴʜᴇʀɪᴛ ᴛʜɪs ᴅᴇꜰᴀᴜʟᴛ."
+            f"</blockquote>"
+        )
+        logger.info("Global req_timer set to %ss by admin %s.", seconds, message.from_user.id)
+        return
+
+    # ── Two arguments: /reqtime <channel_id> <seconds> → one channel ──────────
+    if len(args) == 2:
+        try:
+            ch_id   = int(args[0])
+            seconds = int(args[1])
+            if seconds < 0:
+                raise ValueError
+        except ValueError:
+            await message.reply_text(
+                "<blockquote>❌ ᴄʜᴀɴɴᴇʟ ɪᴅ ᴀɴᴅ sᴇᴄᴏɴᴅs ᴍᴜsᴛ ʙᴇ ɴᴏɴ-ɴᴇɢᴀᴛɪᴠᴇ ɪɴᴛᴇɢᴇʀs.</blockquote>"
+            )
+            return
+
+        if not await CosmicBotz.is_channel_exist(ch_id):
+            await message.reply_text(
+                "<blockquote>❌ ᴄʜᴀɴɴᴇʟ ɴᴏᴛ ʀᴇɢɪsᴛᴇʀᴇᴅ.</blockquote>"
+            )
+            return
+
+        await CosmicBotz.set_req_timer(ch_id, seconds)
+        delay_str = "ɪᴍᴍᴇᴅɪᴀᴛᴇʟʏ" if seconds == 0 else f"ᴀꜰᴛᴇʀ <b>{seconds}s</b>"
+        await message.reply_text(
+            f"<blockquote>✅ ᴄʜᴀɴɴᴇʟ <code>{ch_id}</code>: ʀᴇǫᴜᴇsᴛs ᴀᴘᴘʀᴏᴠᴇᴅ {delay_str}.</blockquote>"
         )
         return
 
-    if not await CosmicBotz.is_channel_exist(ch_id):
-        await message.reply_text(
-            "<blockquote>❌ Channel not registered.</blockquote>"
-        )
-        return
-
-    await CosmicBotz.set_req_timer(ch_id, seconds)
-
-    if seconds == 0:
-        await message.reply_text(
-            f"<blockquote>✅ Channel <code>{ch_id}</code>: join requests approved <b>immediately</b>.</blockquote>"
-        )
-    else:
-        await message.reply_text(
-            f"<blockquote>✅ Channel <code>{ch_id}</code>: join requests approved after <b>{seconds}s</b>.</blockquote>"
-        )
+    # Too many args
+    await message.reply_text(
+        "<blockquote>❌ ᴛᴏᴏ ᴍᴀɴʏ ᴀʀɢᴜᴍᴇɴᴛs.\n"
+        "ᴜsᴇ <code>/reqtime &lt;seconds&gt;</code> ᴏʀ "
+        "<code>/reqtime &lt;channel_id&gt; &lt;seconds&gt;</code></blockquote>"
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  /approveon  — GLOBAL enable (no channel_id needed)
+#  /approveon  — GLOBAL enable
 # ──────────────────────────────────────────────────────────────────────────────
 
 @Client.on_message(filters.command("approveon") & filters.private & admin_filter)
@@ -113,23 +153,21 @@ async def approve_on(client: Client, message: Message):
     channels = await CosmicBotz.get_all_channels()
     if not channels:
         await message.reply_text(
-            "<blockquote>📭 No channels registered yet. Use <code>/addch</code> first.</blockquote>"
+            "<blockquote>📭 ɴᴏ ᴄʜᴀɴɴᴇʟs ʀᴇɢɪsᴛᴇʀᴇᴅ ʏᴇᴛ.</blockquote>"
         )
         return
 
-    count = 0
     for ch in channels:
         await CosmicBotz.set_req_mode(ch["_id"], True)
-        count += 1
 
     await message.reply_text(
-        f"<blockquote>✅ Auto-approval <b>enabled</b> for all <b>{count}</b> registered channel(s).</blockquote>"
+        f"<blockquote>✅ ᴀᴜᴛᴏ-ᴀᴘᴘʀᴏᴠᴀʟ <b>ᴇɴᴀʙʟᴇᴅ</b> ꜰᴏʀ ᴀʟʟ <b>{len(channels)}</b> ᴄʜᴀɴɴᴇʟ(s).</blockquote>"
     )
-    logger.info("Global approveon by admin %s — %d channels.", message.from_user.id, count)
+    logger.info("Global approveon by admin %s.", message.from_user.id)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  /approveoff  — GLOBAL disable (no channel_id needed)
+#  /approveoff  — GLOBAL disable
 # ──────────────────────────────────────────────────────────────────────────────
 
 @Client.on_message(filters.command("approveoff") & filters.private & admin_filter)
@@ -137,23 +175,21 @@ async def approve_off(client: Client, message: Message):
     channels = await CosmicBotz.get_all_channels()
     if not channels:
         await message.reply_text(
-            "<blockquote>📭 No channels registered yet.</blockquote>"
+            "<blockquote>📭 ɴᴏ ᴄʜᴀɴɴᴇʟs ʀᴇɢɪsᴛᴇʀᴇᴅ ʏᴇᴛ.</blockquote>"
         )
         return
 
-    count = 0
     for ch in channels:
         await CosmicBotz.set_req_mode(ch["_id"], False)
-        count += 1
 
     await message.reply_text(
-        f"<blockquote>❌ Auto-approval <b>disabled</b> for all <b>{count}</b> registered channel(s).</blockquote>"
+        f"<blockquote>❌ ᴀᴜᴛᴏ-ᴀᴘᴘʀᴏᴠᴀʟ <b>ᴅɪsᴀʙʟᴇᴅ</b> ꜰᴏʀ ᴀʟʟ <b>{len(channels)}</b> ᴄʜᴀɴɴᴇʟ(s).</blockquote>"
     )
-    logger.info("Global approveoff by admin %s — %d channels.", message.from_user.id, count)
+    logger.info("Global approveoff by admin %s.", message.from_user.id)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  ChatJoinRequest handler — auto-approve when mode is ON for that channel
+#  ChatJoinRequest — auto-approve if mode is ON for that channel
 # ──────────────────────────────────────────────────────────────────────────────
 
 @Client.on_chat_join_request()
@@ -175,4 +211,4 @@ async def handle_join_request(client: Client, request: ChatJoinRequest):
         await client.approve_chat_join_request(ch_id, user_id)
         logger.info("Auto-approved: user %s → channel %s.", user_id, ch_id)
     except Exception as e:
-        logger.warning("Failed auto-approve user %s in %s: %s", user_id, ch_id, e)
+        logger.warning("Auto-approve failed: user %s in %s: %s", user_id, ch_id, e)
