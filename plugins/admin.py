@@ -66,9 +66,10 @@ async def stats_handler(client: Client, message: Message):
     await message.reply_text(
         "<b>📊 ʙᴏᴛ sᴛᴀᴛɪsᴛɪᴄs</b>\n\n"
         "<blockquote>"
-        f"❍ ᴜsᴇʀs    : <b>{data['users']}</b>\n"
-        f"❍ ᴄʜᴀɴɴᴇʟs : <b>{data['channels']}</b>\n"
-        f"❍ ᴜᴘᴛɪᴍᴇ   : <b>{uptime_str}</b>"
+        f"❍ ᴜsᴇʀs      : <b>{data['users']}</b>\n"
+        f"❍ ᴄʜᴀɴɴᴇʟs  : <b>{data['channels']}</b>\n"
+        f"❍ ʟɪɴᴋs ɢᴇɴ : <b>{data.get('total_links', 0)}</b>\n"
+        f"❍ ᴜᴘᴛɪᴍᴇ    : <b>{uptime_str}</b>"
         "</blockquote>"
     )
 
